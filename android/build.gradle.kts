@@ -1,0 +1,40 @@
+buildscript {
+    ext.kotlin_version = '1.9.0' // Use a recent version
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        // Required for Kotlin compatibility
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        // 👇 CRITICAL: REQUIRED FOR FIREBASE CONFIGURATION
+        classpath 'com.google.gms:google-services:4.4.0' // Use latest stable version
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
+rootProject.layout.buildDirectory.value(newBuildDir)
+
+subprojects {
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
+}

@@ -1,0 +1,63 @@
+# /.github/workflows/main.yml
+
+name: Flutter CI Checks
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events for the main branch
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This job performs code analysis and testing
+  build_and_test:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks out your repository under $GITHUB_WORKSPACE, so the job can access it
+      - uses: actions/checkout@v4
+
+      # Sets up the Flutter environment using the official Flutter Action
+      - uses: subosito/flutter-action@v2
+        with:
+          # Specify the Flutter version you are using, or 'stable'
+          flutter-version: '3.16.0' # Adjust this to your current version or 'stable'
+          channel: 'stable'
+          
+      # -----------------------------------------------------
+      # 1. Check Dart/Flutter dependencies
+      # -----------------------------------------------------
+      - name: 📦 Get Dependencies
+        run: flutter pub get
+
+      # -----------------------------------------------------
+      # 2. Check Code Formatting
+      #    Fails if any file is incorrectly formatted
+      # -----------------------------------------------------
+      - name: 🧹 Check Formatting
+        run: dart format --set-exit-if-changed .
+
+      # -----------------------------------------------------
+      # 3. Analyze Code (Linter)
+      #    Fails if any linter warnings or errors are found
+      # -----------------------------------------------------
+      - name: 🔬 Analyze Code
+        run: flutter analyze
+
+      # -----------------------------------------------------
+      # 4. Run Tests (If you have a 'test' directory)
+      #    Fails if any unit or widget tests fail
+      # -----------------------------------------------------
+      - name: 🧪 Run Tests
+        run: flutter test
+        # Use '|| true' to allow the CI to pass even if you haven't written tests yet.
+        # Once you have tests, remove '|| true' to enforce testing.
+        # run: flutter test || true

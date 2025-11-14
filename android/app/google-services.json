@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "250491374057",
+    "project_id": "beatrivals-d8d2c",
+    "storage_bucket": "beatrivals-d8d2c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:250491374057:android:b715c21974a03b19f86378",
+        "android_client_info": {
+          "package_name": "com.example.beatrivals_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKVhLLucXKGtwStP6p8kRZLtrdGDAFLVo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
