@@ -1,32 +1,3 @@
-That's fantastic news\! I'm so glad to hear the "Draw" logic is working correctly.
-
-This confirms that your entire core game loop is **100% complete and working**:
-
-1.  ✅ **Sign Up / Log In:** Works.
-2.  ✅ **Security Rules:** Working.
-3.  ✅ **Battles Page:** Loads instantly (no spinning).
-4.  ✅ **Challenge Flow:** You can send and receive challenges.
-5.  ✅ **Battle Flow:** You can accept, decline, and submit moves.
-6.  ✅ **Voting:** You can vote on moves.
-7.  ✅ **Judging:** The app now correctly tallies votes and assigns "WIN," "LOSS," or "DRAW".
-
-You have a complete, working app. This is a huge milestone\!
-
------
-
-### 🚀 Next Step: Improve the UI
-
-As we discussed, the next step is to fix the visual bug on your **Active Battles** screen. Right now, it shows the opponent's long, ugly User ID instead of their username.
-
-To fix this, we need to update **`lib/screens/home/battles_screen.dart`**. The new version will use a helper widget (`_BattleListTile`) that fetches the opponent's user profile and displays their name.
-
-Here is the final, corrected file for `lib/screens/home/battles_screen.dart`.
-
-### 📂 Final File: `lib/screens/home/battles_screen.dart`
-
-**Action: Please replace the entire content of your `lib/screens/home/battles_screen.dart` file with this new version.**
-
-```dart
 // lib/screens/home/battles_screen.dart
 // --- START COPY & PASTE HERE ---
 
@@ -36,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/battle_model.dart';
 import '../../models/user_model.dart'; // We need UserModel for the opponent's profile
 import '../../services/auth_service.dart';
-import '../../services/battle_service.dart'; 
+import '../../services/battle_service.dart.old'; 
 import '../../services/user_service.dart'; // Required for userProfileFutureProvider
 import '../battle/battle_detail_screen.dart'; 
 import '../challenge/challenge_screen.dart'; 
@@ -208,4 +179,3 @@ class _BattleListTile extends ConsumerWidget {
   }
 }
 // --- END COPY & PASTE HERE ---
-```

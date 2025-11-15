@@ -1,18 +1,32 @@
 // lib/screens/home/activity_screen.dart
+// --- START COPY & PASTE HERE ---
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/activity_model.dart';
-import '../../models/user_model.dart';
-import '../../services/activity_service.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import '../../models/activity_model.dart';
+import '../../services/activity_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/user_service.dart';
+import 'profile_screen.dart';
+import '../battle/battle_detail_screen.dart';
+import '../../providers/navigation_provider.dart';
 
 class ActivityScreen extends ConsumerWidget {
   const ActivityScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final activityAsync = ref.watch(globalActivityStreamProvider);
+    final currentUserId = ref.watch(authStateChangesProvider).value?.uid;
+
+    if (currentUserId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Activity')),
+        body: const Center(child: Text('Please log in to see activity.')),
+      );
+    }
+
+    final activityAsync = ref.watch(activityFeedStreamProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -21,28 +35,24 @@ class ActivityScreen extends ConsumerWidget {
       ),
       body: activityAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(child: Text('Error loading activity: $e')),
+        error: (err, stack) => Center(child: Text('Error loading activity: $err')),
         data: (activities) {
           if (activities.isEmpty) {
             return const Center(
-              child: Text('No recent activity yet. Start a battle!'),
+              child: Text(
+                'No recent activity.\nChallenge a user or complete a battle!',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
             );
           }
 
-          // Fetch all user profiles related to the activities
-          final usersAsync = ref.watch(activityUsersProvider(activities));
-
-          return usersAsync.when(
-            loading: () => const Center(child: Text('Loading user data...')),
-            error: (e, st) => Center(child: Text('Error loading users: $e')),
-            data: (usersMap) {
-              return ListView.builder(
-                itemCount: activities.length,
-                itemBuilder: (context, index) {
-                  final activity = activities[index];
-                  return ActivityTile(activity: activity, usersMap: usersMap);
-                },
-              );
+          return ListView.builder(
+            itemCount: activities.length,
+            itemBuilder: (context, index) {
+              final activity = activities[index];
+              // Use a dedicated widget to handle fetching user names
+              return _ActivityTile(activity: activity);
             },
           );
         },
@@ -51,103 +61,127 @@ class ActivityScreen extends ConsumerWidget {
   }
 }
 
-// --- Activity Tile Widget ---
-
-class ActivityTile extends StatelessWidget {
+// A helper widget to build the correct text for each activity type
+class _ActivityTile extends ConsumerWidget {
   final ActivityModel activity;
-  final Map<String, UserModel> usersMap;
 
-  const ActivityTile({
-    super.key,
-    required this.activity,
-    required this.usersMap,
-  });
+  const _ActivityTile({required this.activity});
 
   @override
-  Widget build(BuildContext context) {
-    // Helper function to safely get a username
-    String getUsername(String uid) => usersMap[uid]?.username ?? 'Unknown User';
+  Widget build(BuildContext context, WidgetRef ref) {
+    // We need to fetch the user profiles to display their names
+    final actorProfileAsync = ref.watch(userProfileFutureProvider(activity.actorUid));
+    
+    // Not all activities have a target user, so we handle null
+    final targetProfileAsync = activity.targetUid != null
+        ? ref.watch(userProfileFutureProvider(activity.targetUid!))
+        : null;
+
+    return actorProfileAsync.when(
+      loading: () => const ListTile(title: Text('Loading activity...')),
+      error: (err, stack) => ListTile(title: Text('Error loading user: $err')),
+      data: (actor) {
+        // This handles the case where the target is also loading
+        return targetProfileAsync != null
+            ? targetProfileAsync.when(
+                loading: () => const ListTile(title: Text('Loading activity...')),
+                error: (err, stack) => ListTile(title: Text('Error loading user: $err')),
+                data: (target) {
+                  return _buildTile(context, ref, actor?.username, target?.username);
+                },
+              )
+            : _buildTile(context, ref, actor?.username, null); // Build with no target
+      },
+    );
+  }
+
+  Widget _buildTile(BuildContext context, WidgetRef ref, String? actorName, String? targetName) {
+    final String actor = actorName ?? 'Someone';
+    final String target = targetName ?? 'someone';
+    final String time = timeago.format(activity.timestamp);
 
     IconData icon;
-    Color color;
-    TextSpan message;
-
-    final challengerName = getUsername(activity.challengerUid);
-    final opponentName = getUsername(activity.opponentUid);
-    final timeAgo = timeago.format(activity.timestamp);
+    String titleText;
+    VoidCallback? onTap;
 
     switch (activity.type) {
       case ActivityType.challengeSent:
         icon = Icons.send;
-        color = Colors.blue;
-        message = TextSpan(
-          children: [
-            TextSpan(text: '$challengerName ', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const TextSpan(text: 'challenged '),
-            TextSpan(text: opponentName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const TextSpan(text: ' to a battle.'),
-          ],
-        );
+        titleText = '$actor challenged $target.';
+        onTap = () {
+          if (activity.battleId != null) {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (context) => BattleDetailScreen(battleId: activity.battleId!),
+            ));
+          }
+        };
         break;
-
       case ActivityType.challengeAccepted:
-        icon = Icons.check_circle;
-        color = Colors.green;
-        message = TextSpan(
-          children: [
-            TextSpan(text: opponentName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const TextSpan(text: ' accepted the challenge from '),
-            TextSpan(text: challengerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const TextSpan(text: '. Battle is ON!'),
-          ],
-        );
+        icon = Icons.check_circle_outline;
+        titleText = '$actor accepted $target\'s challenge.';
+        onTap = () {
+          if (activity.battleId != null) {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (context) => BattleDetailScreen(battleId: activity.battleId!),
+            ));
+          }
+        };
         break;
-
       case ActivityType.challengeDeclined:
-        icon = Icons.cancel;
-        color = Colors.red;
-        message = TextSpan(
-          children: [
-            TextSpan(text: opponentName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const TextSpan(text: ' declined the challenge from '),
-            TextSpan(text: challengerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const TextSpan(text: '.'),
-          ],
-        );
+        icon = Icons.cancel_outlined;
+        titleText = '$actor declined $target\'s challenge.';
+        onTap = () {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (context) => ProfileScreen(targetUid: activity.actorUid),
+          ));
+        };
         break;
-
       case ActivityType.battleCompleted:
-        icon = Icons.military_tech;
-        color = Colors.purple;
-        String winnerText;
-
-        if (activity.winnerUid == 'Draw') {
-          winnerText = 'The battle between $challengerName and $opponentName ended in a Draw.';
-        } else if (activity.winnerUid != null) {
-          final winnerName = getUsername(activity.winnerUid!);
-          winnerText = '$winnerName won the battle against $opponentName.';
+        icon = Icons.emoji_events;
+        String winner = actorName ?? 'A user';
+        String loser = targetName ?? 'a user';
+        if (activity.actorUid == 'Draw') {
+          titleText = 'A battle between $loser and $target ended in a Draw!';
+          icon = Icons.handshake;
         } else {
-          winnerText = 'A battle was completed.';
+          titleText = '$winner defeated $loser in a battle!';
         }
-
-        message = TextSpan(
-          text: winnerText,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        );
+        onTap = () {
+          if (activity.battleId != null) {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (context) => BattleDetailScreen(battleId: activity.battleId!),
+            ));
+          }
+        };
+        break;
+      case ActivityType.friendRequest:
+        icon = Icons.person_add;
+        titleText = '$actor sent you a friend request.';
+        onTap = () {
+          ref.read(homeTabIndexProvider.notifier).state = 3; // Go to Friends tab
+        };
+        break;
+      // FIX: Added missing case
+      case ActivityType.friendAccepted: 
+        icon = Icons.people;
+        titleText = 'You and $actor are now friends.';
+        onTap = () {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (context) => ProfileScreen(targetUid: activity.actorUid),
+          ));
+        };
         break;
     }
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      elevation: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: ListTile(
-        leading: Icon(icon, color: color, size: 28),
-        title: RichText(text: message),
-        trailing: Text(
-          timeAgo,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
+        leading: Icon(icon, color: Theme.of(context).primaryColor),
+        title: Text(titleText),
+        subtitle: Text(time),
+        onTap: onTap,
       ),
     );
   }
 }
+// --- END COPY & PASTE HERE ---

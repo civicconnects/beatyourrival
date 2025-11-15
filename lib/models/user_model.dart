@@ -12,10 +12,13 @@ class UserModel {
   final int wins;
   final int losses;
   final DateTime createdAt;
-  
-  // FIX: Added fields for V3.0
   final bool isOnline;
   final bool isReadyToBattle;
+
+  // --- NEW FIELDS FOR FRIENDS ---
+  final List<String> friends;
+  final List<String> friendRequests;
+  // ------------------------------
 
   UserModel({
     required this.uid,
@@ -29,6 +32,8 @@ class UserModel {
     required this.createdAt,
     this.isOnline = false,
     this.isReadyToBattle = false,
+    this.friends = const [], // Add to constructor
+    this.friendRequests = const [], // Add to constructor
   });
 
   Map<String, dynamic> toMap() {
@@ -40,16 +45,23 @@ class UserModel {
       'profileImageUrl': profileImageUrl,
       'wins': wins,
       'losses': losses,
-      'createdAt': Timestamp.fromDate(createdAt), // Store as Timestamp
+      'createdAt': Timestamp.fromDate(createdAt),
       'isOnline': isOnline,
       'isReadyToBattle': isReadyToBattle,
+      'friends': friends, // Add to map
+      'friendRequests': friendRequests, // Add to map
     };
   }
 
-  // FIX: Factory constructor now accepts 'id' as a required second argument
   factory UserModel.fromMap(Map<String, dynamic> map, String id) { 
+    // Helper to safely cast lists
+    List<String> _castList(dynamic list) {
+      if (list == null) return [];
+      return (list as List<dynamic>).map((item) => item as String).toList();
+    }
+    
     return UserModel(
-      uid: id, // Use the passed ID
+      uid: id,
       username: map['username'] as String? ?? 'Unnamed User',
       email: map['email'] as String? ?? '',
       eloScore: (map['eloScore'] as num? ?? 1000).toDouble(),
@@ -60,6 +72,8 @@ class UserModel {
       createdAt: (map['createdAt'] as Timestamp? ?? Timestamp.now()).toDate(),
       isOnline: map['isOnline'] as bool? ?? false,
       isReadyToBattle: map['isReadyToBattle'] as bool? ?? false,
+      friends: _castList(map['friends']), // Add to factory
+      friendRequests: _castList(map['friendRequests']), // Add to factory
     );
   }
 }

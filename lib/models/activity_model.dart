@@ -1,60 +1,71 @@
 // lib/models/activity_model.dart
+// --- START COPY & PASTE HERE ---
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum ActivityType { challengeSent, challengeAccepted, challengeDeclined, battleCompleted }
+// Defines the types of activities we can log
+enum ActivityType {
+  challengeSent,
+  challengeAccepted,
+  challengeDeclined,
+  battleCompleted,
+  friendRequest,
+  friendAccepted // FIX: Added missing type
+}
 
 class ActivityModel {
   final String id;
-  final String battleId;
-  final String challengerUid;
-  final String opponentUid;
-  final String? winnerUid;
-  final int? challengerScore; // <-- ADDED
-  final int? opponentScore;   // <-- ADDED
   final ActivityType type;
   final DateTime timestamp;
+  // List of UIDs involved (e.g., [challenger, opponent])
+  // This is used to query the feed
+  final List<String> participants; 
+  final String actorUid; // The user who *performed* the action
+  final String? targetUid; // The user who *received* the action (optional)
+  final String? battleId; // The battle this is related to (optional)
+  final int? challengerScore; // Optional
+  final int? opponentScore; // Optional
 
   ActivityModel({
     required this.id,
-    required this.battleId,
-    required this.challengerUid,
-    required this.opponentUid,
-    this.winnerUid,
-    this.challengerScore, // <-- ADDED
-    this.opponentScore,   // <-- ADDED
     required this.type,
     required this.timestamp,
+    required this.participants, // FIX: Added to constructor
+    required this.actorUid,   // FIX: Added to constructor
+    this.targetUid,
+    this.battleId,
+    this.challengerScore,
+    this.opponentScore,
   });
-
-  factory ActivityModel.fromMap(Map<String, dynamic> map) {
-    return ActivityModel(
-      id: map['id'] ?? '',
-      battleId: map['battleId'] ?? '',
-      challengerUid: map['challengerUid'] ?? '',
-      opponentUid: map['opponentUid'] ?? '',
-      winnerUid: map['winnerUid'],
-      challengerScore: map['challengerScore'], // <-- ADDED
-      opponentScore: map['opponentScore'],     // <-- ADDED
-      type: ActivityType.values.firstWhere(
-          (e) => e.toString().split('.').last == map['type'],
-          orElse: () => ActivityType.challengeSent),
-      timestamp: map['timestamp'] != null
-          ? (map['timestamp'] as Timestamp).toDate()
-          : DateTime.now(),
-    );
-  }
 
   Map<String, dynamic> toMap() {
     return {
+      'type': type.name,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'participants': participants,
+      'actorUid': actorUid,
+      'targetUid': targetUid,
       'battleId': battleId,
-      'challengerUid': challengerUid,
-      'opponentUid': opponentUid,
-      'winnerUid': winnerUid,
-      'challengerScore': challengerScore, // <-- ADDED
-      'opponentScore': opponentScore,     // <-- ADDED
-      'type': type.toString().split('.').last,
-      'timestamp': timestamp,
+      'challengerScore': challengerScore,
+      'opponentScore': opponentScore,
     };
   }
+
+  factory ActivityModel.fromMap(Map<String, dynamic> map, String id) {
+    return ActivityModel(
+      id: id,
+      type: ActivityType.values.firstWhere(
+        (e) => e.name == map['type'],
+        orElse: () => ActivityType.challengeSent, // Default fallback
+      ),
+      timestamp: (map['timestamp'] as Timestamp).toDate(),
+      participants: List<String>.from(map['participants'] ?? []),
+      actorUid: map['actorUid'] as String? ?? '',
+      targetUid: map['targetUid'] as String?,
+      battleId: map['battleId'] as String?,
+      challengerScore: map['challengerScore'] as int?,
+      opponentScore: map['opponentScore'] as int?,
+    );
+  }
 }
+// --- END COPY & PASTE HERE ---
