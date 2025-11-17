@@ -8,17 +8,16 @@ enum ActivityType {
   challengeSent,
   challengeAccepted,
   challengeDeclined,
+  challengeCanceled,
   battleCompleted,
   friendRequest,
-  friendAccepted // FIX: Added missing type
+  friendAccepted
 }
 
 class ActivityModel {
   final String id;
   final ActivityType type;
   final DateTime timestamp;
-  // List of UIDs involved (e.g., [challenger, opponent])
-  // This is used to query the feed
   final List<String> participants; 
   final String actorUid; // The user who *performed* the action
   final String? targetUid; // The user who *received* the action (optional)
@@ -30,8 +29,8 @@ class ActivityModel {
     required this.id,
     required this.type,
     required this.timestamp,
-    required this.participants, // FIX: Added to constructor
-    required this.actorUid,   // FIX: Added to constructor
+    required this.participants, // This field is required
+    required this.actorUid,   // This field is required
     this.targetUid,
     this.battleId,
     this.challengerScore,

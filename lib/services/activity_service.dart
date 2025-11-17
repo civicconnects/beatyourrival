@@ -84,6 +84,20 @@ class ActivityService {
     await _activityCollection.add(activity.toMap());
   }
   
+  // --- NEW LOGGING METHOD ---
+  Future<void> logChallengeCanceled(String battleId, String challengerUid, String opponentUid) async {
+    final activity = ActivityModel(
+      id: '',
+      type: ActivityType.challengeCanceled, // Use the new type
+      timestamp: DateTime.now(),
+      participants: [challengerUid, opponentUid],
+      actorUid: challengerUid, // The challenger is the one who canceled
+      targetUid: opponentUid,
+      battleId: battleId,
+    );
+    await _activityCollection.add(activity.toMap());
+  }
+
   Future<void> logBattleCompleted(String battleId, String challengerUid, String opponentUid, String winnerUid, {int? challengerScore, int? opponentScore}) async {
     final activity = ActivityModel(
       id: '',

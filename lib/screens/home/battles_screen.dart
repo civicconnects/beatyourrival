@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/battle_model.dart';
-import '../../models/user_model.dart'; // We need UserModel for the opponent's profile
+import '../../models/user_model.dart'; 
 import '../../services/auth_service.dart';
-import '../../services/battle_service.dart.old'; 
-import '../../services/user_service.dart'; // Required for userProfileFutureProvider
+import '../../services/battle_service.dart'; 
+import '../../services/user_service.dart'; 
 import '../battle/battle_detail_screen.dart'; 
 import '../challenge/challenge_screen.dart'; 
 
@@ -80,8 +80,7 @@ class BattlesScreen extends ConsumerWidget {
 }
 
 
-// --- NEW HELPER WIDGET ---
-// This widget fetches the opponent's profile to display their name
+// --- HELPER WIDGET ---
 class _BattleListTile extends ConsumerWidget {
   final BattleModel battle;
   final String opponentId;
@@ -97,25 +96,23 @@ class _BattleListTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch the Future provider to get the opponent's profile
     final opponentProfileAsync = ref.watch(userProfileFutureProvider(opponentId));
 
     return opponentProfileAsync.when(
       data: (opponent) {
-        // If the opponent profile is loaded, show the real tile
         final opponentUsername = opponent?.username ?? 'Unknown Rival';
         
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
           child: ListTile(
             title: Text(
-              'Battle with $opponentUsername', // <-- FIX: Shows username
+              'Battle with $opponentUsername', 
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
               'Status: ${battle.status.toString().split('.').last.toUpperCase()}',
             ),
-            trailing: _buildTrailingWidget(ref, battle, isChallenger),
+            trailing: _buildTrailingWidget(context, ref, battle, isChallenger), // FIX: Pass context
             onTap: () {
               if (battle.id != null) {
                 Navigator.of(context).push(
@@ -128,7 +125,6 @@ class _BattleListTile extends ConsumerWidget {
           ),
         );
       },
-      // Show placeholder tiles while loading or if an error occurs
       loading: () => const Card(
         margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
         child: ListTile(
@@ -146,13 +142,41 @@ class _BattleListTile extends ConsumerWidget {
     );
   }
 
-  // This is the same logic as before, just moved inside the new widget
-  Widget _buildTrailingWidget(WidgetRef ref, BattleModel battle, bool isChallenger) {
+  // --- WIDGET WITH THE FIX ---
+  Widget _buildTrailingWidget(BuildContext context, WidgetRef ref, BattleModel battle, bool isChallenger) {
     final battleService = ref.read(battleServiceProvider);
 
     if (battle.status == BattleStatus.pending) {
       if (isChallenger) {
-        return const Text('Awaiting Acceptance');
+        // FIX: If I am the challenger, I can cancel
+        return IconButton(
+          icon: const Icon(Icons.close, color: Colors.red),
+          tooltip: 'Cancel Challenge',
+          onPressed: () async {
+            // Show confirmation dialog
+            final shouldCancel = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Cancel Challenge?'),
+                content: const Text('Are you sure you want to cancel this challenge?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('No'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Yes, Cancel'),
+                  ),
+                ],
+              ),
+            );
+
+            if (shouldCancel == true) {
+              await battleService.cancelChallenge(battle.id!);
+            }
+          },
+        );
       } else {
         // Opponent (the current user) needs to accept or decline
         return Row(
@@ -160,10 +184,12 @@ class _BattleListTile extends ConsumerWidget {
           children: [
             IconButton(
               icon: const Icon(Icons.check, color: Colors.green),
+              tooltip: 'Accept',
               onPressed: () => battleService.acceptChallenge(battle.id!), 
             ),
             IconButton(
               icon: const Icon(Icons.close, color: Colors.red),
+              tooltip: 'Decline',
               onPressed: () => battleService.declineChallenge(battle.id!), 
             ),
           ],

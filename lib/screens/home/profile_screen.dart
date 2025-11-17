@@ -83,6 +83,9 @@ class ProfileScreen extends ConsumerWidget {
            return const Center(child: Text('Authenticating...'));
         }
         
+        // Logic: Show stats if it's ME, OR if the user has set stats to PUBLIC
+        final bool showStats = (targetUid == null) || targetUser.isStatsPublic;
+        
         return Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -108,18 +111,16 @@ class ProfileScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               
-              // --- FRIEND BUTTON LOGIC ---
               if (targetUid != null && currentUser != null) 
                 _buildFriendButton(context, ref, currentUser, targetUser),
-              // ---------------------------
               
               const Divider(height: 32),
               
-              // --- 'READY TO BATTLE' TOGGLE ---
-              if (targetUid == null)
+              // --- MY PROFILE SETTINGS ---
+              if (targetUid == null) ...[
                 SwitchListTile(
                   title: const Text('Ready to Battle', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-                  subtitle: Text(targetUser.isReadyToBattle ? 'You are visible to challengers' : 'You are hidden from search'),
+                  subtitle: Text(targetUser.isReadyToBattle ? 'Visible in search' : 'Hidden from search'),
                   value: targetUser.isReadyToBattle,
                   onChanged: (bool isReady) {
                     ref.read(userServiceProvider).updateUserReadyStatus(targetUser.uid, isReady);
@@ -127,13 +128,36 @@ class ProfileScreen extends ConsumerWidget {
                   activeColor: Colors.green,
                   secondary: Icon(targetUser.isReadyToBattle ? Icons.shield : Icons.shield_outlined),
                 ),
-              if (targetUid == null) const Divider(height: 32),
-              // --------------------------------
-              
+                // NEW: Privacy Toggle
+                SwitchListTile(
+                  title: const Text('Show Win/Loss Record', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                  subtitle: Text(targetUser.isStatsPublic ? 'Visible to everyone' : 'Private (Hidden)'),
+                  value: targetUser.isStatsPublic,
+                  onChanged: (bool isPublic) {
+                    ref.read(userServiceProvider).updateUserStatsVisibility(targetUser.uid, isPublic);
+                  },
+                  activeColor: Colors.blue,
+                  secondary: Icon(targetUser.isStatsPublic ? Icons.visibility : Icons.visibility_off),
+                ),
+                const Divider(height: 32),
+              ],
+
+              // --- STATS DISPLAY ---
               _buildInfoRow('ELO Rating', targetUser.eloScore.toStringAsFixed(0), Icons.star),
               _buildInfoRow('Total Battles', targetUser.totalBattles.toString(), Icons.military_tech),
-              _buildInfoRow('Wins', targetUser.wins.toString(), Icons.emoji_events, color: Colors.green),
-              _buildInfoRow('Losses', targetUser.losses.toString(), Icons.cancel, color: Colors.red),
+              
+              if (showStats) ...[
+                _buildInfoRow('Wins', targetUser.wins.toString(), Icons.emoji_events, color: Colors.green),
+                _buildInfoRow('Losses', targetUser.losses.toString(), Icons.cancel, color: Colors.red),
+              ] else ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Center(child: Text('Win/Loss record is private.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic))),
+                ),
+              ],
+              
+              if (targetUid == null) 
+                _buildInfoRow('Email', targetUser.email, Icons.email),
             ],
           ),
         );
@@ -141,24 +165,18 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  // --- WIDGET: Builds the correct friend button ---
   Widget _buildFriendButton(BuildContext context, WidgetRef ref, UserModel currentUser, UserModel targetUser) {
     final friendService = ref.read(friendServiceProvider);
-    
     final bool isFriend = currentUser.friends.contains(targetUser.uid);
     final bool hasSentRequest = targetUser.friendRequests.contains(currentUser.uid);
     final bool hasReceivedRequest = currentUser.friendRequests.contains(targetUser.uid);
 
-    // Case 1: You are already friends
     if (isFriend) {
       return Center(
         child: ElevatedButton.icon(
           icon: const Icon(Icons.check, size: 16),
           label: const Text('Friends'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-          ),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
           onPressed: () async {
             final shouldRemove = await showDialog<bool>(
               context: context,
@@ -179,38 +197,30 @@ class ProfileScreen extends ConsumerWidget {
       );
     }
     
-    // Case 2: You have sent them a request
     if (hasSentRequest) {
-      // FIX: Removed 'const' from Center
       return Center(
         child: ElevatedButton.icon(
           icon: const Icon(Icons.send, size: 16),
           label: const Text('Friend Request Sent'),
-          onPressed: null, // Disabled button
+          onPressed: null,
         ),
       );
     }
     
-    // Case 3: They have sent you a request
     if (hasReceivedRequest) {
       return Center(
         child: ElevatedButton.icon(
           icon: const Icon(Icons.person_add_alt_1, size: 16),
           label: const Text('Respond to Request'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            foregroundColor: Colors.white,
-          ),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
           onPressed: () {
-            // Navigate to the Friends tab (index 3) to respond
             ref.read(homeTabIndexProvider.notifier).state = 3; 
-            Navigator.of(context).pop(); // Go back from the profile screen
+            Navigator.of(context).pop(); 
           },
         ),
       );
     }
 
-    // Case 4: No relationship
     return Center(
       child: ElevatedButton.icon(
         icon: const Icon(Icons.person_add, size: 16),
@@ -230,18 +240,9 @@ class ProfileScreen extends ConsumerWidget {
           Icon(icon, color: color ?? Colors.grey.shade600, size: 24),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-            ),
+            child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
           ),
-          Text(
-            value,
-            style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color ?? Colors.black87),
-          ),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color ?? Colors.black87)),
         ],
       ),
     );

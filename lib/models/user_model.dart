@@ -14,11 +14,13 @@ class UserModel {
   final DateTime createdAt;
   final bool isOnline;
   final bool isReadyToBattle;
+  
+  // --- NEW PRIVACY FIELD ---
+  final bool isStatsPublic; 
+  // ------------------------
 
-  // --- NEW FIELDS FOR FRIENDS ---
   final List<String> friends;
   final List<String> friendRequests;
-  // ------------------------------
 
   UserModel({
     required this.uid,
@@ -32,8 +34,9 @@ class UserModel {
     required this.createdAt,
     this.isOnline = false,
     this.isReadyToBattle = false,
-    this.friends = const [], // Add to constructor
-    this.friendRequests = const [], // Add to constructor
+    this.isStatsPublic = true, // Default to public
+    this.friends = const [], 
+    this.friendRequests = const [], 
   });
 
   Map<String, dynamic> toMap() {
@@ -48,13 +51,13 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'isOnline': isOnline,
       'isReadyToBattle': isReadyToBattle,
-      'friends': friends, // Add to map
-      'friendRequests': friendRequests, // Add to map
+      'isStatsPublic': isStatsPublic, // Add to map
+      'friends': friends, 
+      'friendRequests': friendRequests, 
     };
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) { 
-    // Helper to safely cast lists
     List<String> _castList(dynamic list) {
       if (list == null) return [];
       return (list as List<dynamic>).map((item) => item as String).toList();
@@ -72,8 +75,9 @@ class UserModel {
       createdAt: (map['createdAt'] as Timestamp? ?? Timestamp.now()).toDate(),
       isOnline: map['isOnline'] as bool? ?? false,
       isReadyToBattle: map['isReadyToBattle'] as bool? ?? false,
-      friends: _castList(map['friends']), // Add to factory
-      friendRequests: _castList(map['friendRequests']), // Add to factory
+      isStatsPublic: map['isStatsPublic'] as bool? ?? true, // Add to factory
+      friends: _castList(map['friends']), 
+      friendRequests: _castList(map['friendRequests']), 
     );
   }
 }

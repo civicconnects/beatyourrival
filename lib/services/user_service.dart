@@ -1,5 +1,6 @@
 // lib/services/user_service.dart
 // --- START COPY & PASTE HERE ---
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart'; 
@@ -19,7 +20,6 @@ final userProfileStreamProvider = StreamProvider.family<UserModel?, String>((ref
   return ref.read(userServiceProvider).getUserProfileStream(userId);
 });
 
-// Streams the currently logged-in user's profile
 final currentUserProfileStreamProvider = StreamProvider<UserModel?>((ref) {
   final uid = ref.watch(authStateChangesProvider).value?.uid;
   if (uid == null) {
@@ -30,7 +30,7 @@ final currentUserProfileStreamProvider = StreamProvider<UserModel?>((ref) {
 
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final String _collection = 'Users'; // Use uppercase 'Users'
+  final String _collection = 'Users'; 
 
   Future<void> createUserProfile(UserModel user) async {
     await _firestore.collection(_collection).doc(user.uid).set(user.toMap());
@@ -38,20 +38,20 @@ class UserService {
   
   Stream<List<UserModel>> getAllUserProfiles() {
     return _firestore.collection(_collection).snapshots().map((snapshot) => snapshot.docs
-        .map((doc) => UserModel.fromMap(doc.data(), doc.id)) // FIX: Pass ID
+        .map((doc) => UserModel.fromMap(doc.data(), doc.id)) 
         .toList());
   }
 
   Future<UserModel?> getUserProfile(String uid) async {
     final doc = await _firestore.collection(_collection).doc(uid).get();
     if (!doc.exists) return null;
-    return UserModel.fromMap(doc.data()!, doc.id); // FIX: Pass ID
+    return UserModel.fromMap(doc.data()!, doc.id); 
   }
   
   Stream<UserModel?> getUserProfileStream(String uid) {
     return _firestore.collection(_collection).doc(uid).snapshots().map((doc) {
       if (!doc.exists) return null;
-      return UserModel.fromMap(doc.data()!, doc.id); // FIX: Pass ID
+      return UserModel.fromMap(doc.data()!, doc.id); 
     });
   }
   
@@ -67,7 +67,7 @@ class UserService {
         .snapshots()
         .map((snapshot) {
           return snapshot.docs.map((doc) {
-            return UserModel.fromMap(doc.data(), doc.id); // FIX: Pass ID
+            return UserModel.fromMap(doc.data(), doc.id); 
           }).toList();
         });
   }
@@ -79,7 +79,7 @@ class UserService {
         .get();
 
     return snapshot.docs.map((doc) {
-      return UserModel.fromMap(doc.data(), doc.id); // FIX: Pass ID
+      return UserModel.fromMap(doc.data(), doc.id); 
     }).toList();
   }
   
@@ -114,11 +114,17 @@ class UserService {
     await _firestore.collection(_collection).doc(uid).update({'eloScore': newElo});
   }
   
-  // FIX: Added missing method
   Future<void> updateUserReadyStatus(String uid, bool isReady) async {
     await _firestore.collection(_collection).doc(uid).update({
       'isReadyToBattle': isReady,
-      'isOnline': true, // Assume if they change status, they are online
+      'isOnline': true, 
+    });
+  }
+
+  // --- NEW: Update privacy setting ---
+  Future<void> updateUserStatsVisibility(String uid, bool isPublic) async {
+    await _firestore.collection(_collection).doc(uid).update({
+      'isStatsPublic': isPublic,
     });
   }
 }

@@ -70,6 +70,7 @@ class _ActivityTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // We need to fetch the user profiles to display their names
+    // FIX: This now uses activity.actorUid, which exists
     final actorProfileAsync = ref.watch(userProfileFutureProvider(activity.actorUid));
     
     // Not all activities have a target user, so we handle null
@@ -130,6 +131,15 @@ class _ActivityTile extends ConsumerWidget {
       case ActivityType.challengeDeclined:
         icon = Icons.cancel_outlined;
         titleText = '$actor declined $target\'s challenge.';
+        onTap = () {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (context) => ProfileScreen(targetUid: activity.actorUid),
+          ));
+        };
+        break;
+      case ActivityType.challengeCanceled:
+        icon = Icons.block;
+        titleText = '$actor canceled their challenge to $target.';
         onTap = () {
           Navigator.of(context).push(MaterialPageRoute(
             builder: (context) => ProfileScreen(targetUid: activity.actorUid),

@@ -17,12 +17,10 @@ dependencies:
   cloud_firestore: ^4.17.2
   firebase_storage: ^11.7.4
   firebase_messaging: ^14.9.1
-  
-  # FIX: Added rxdart for stream combining and .startWith
   rxdart: ^0.27.7 
   
   # Utility
-  timeago: ^3.6.1 
+  timeago: ^3.6.1 # FIX: This package was missing
   cupertino_icons: ^1.0.6 
   share_plus: ^9.0.0
   image_picker: ^1.2.0

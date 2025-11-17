@@ -7,23 +7,25 @@ import '../../providers/navigation_provider.dart';
 
 // Import all the screens for the tabs
 import 'dashboard_screen.dart';
+import 'battles_screen.dart';     // FIX: Added BattlesScreen import
 import 'search_screen.dart';
 import 'leaderboard_screen.dart'; 
-import 'friends_screen.dart';     // Import the friends screen
+import 'friends_screen.dart';     
 import 'activity_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  // FIX: Made the list 'static const' to fix the compile errors
+  // FIX: Made the list 'static const' AND added all 7 pages
   static const List<Widget> _pages = [
-    DashboardScreen(),
-    SearchScreen(),
-    LeaderboardScreen(), 
-    FriendsScreen(),    // Use the new FriendsScreen
-    ActivityScreen(),
-    ProfileScreen(),    // This uses the default constructor
+    DashboardScreen(),    // Index 0
+    BattlesScreen(),      // Index 1
+    SearchScreen(),     // Index 2
+    LeaderboardScreen(),// Index 3
+    FriendsScreen(),    // Index 4
+    ActivityScreen(),   // Index 5
+    ProfileScreen(),    // Index 6
   ];
 
   @override
@@ -51,10 +53,15 @@ class HomeScreen extends ConsumerWidget {
         showUnselectedLabels: true,
         // ------------------------------------
         
+        // FIX: Added all 7 items to the navigation bar
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bolt), // Battles icon
+            label: 'Battles',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.search),
@@ -65,7 +72,7 @@ class HomeScreen extends ConsumerWidget {
             label: 'Rankings',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.people), // Updated icon for Friends
+            icon: Icon(Icons.people), // Friends icon
             label: 'Friends',
           ),
           BottomNavigationBarItem(

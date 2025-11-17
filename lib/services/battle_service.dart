@@ -32,7 +32,7 @@ final allUserBattlesStreamProvider = StreamProvider.family<List<BattleModel>, St
 
 // Provider for active/pending battles (used by battles_screen.dart)
 final userActiveBattlesStreamProvider = StreamProvider.family<List<BattleModel>, String>((ref, userId) {
-  // FIX: Get the stream directly from the service and filter it
+  // This is the correct, non-spinning provider logic
   return ref.read(battleServiceProvider).getUserBattlesStream(userId).map((battles) {
     return battles.where((b) => b.status == BattleStatus.active || b.status == BattleStatus.pending).toList();
   });
@@ -40,9 +40,9 @@ final userActiveBattlesStreamProvider = StreamProvider.family<List<BattleModel>,
 
 // Provider for completed battles (used by dashboard_screen.dart)
 final userCompletedBattlesStreamProvider = StreamProvider.family<List<BattleModel>, String>((ref, userId) {
-  // FIX: Get the stream directly from the service and filter it
+  // This is the correct, non-spinning provider logic
   return ref.read(battleServiceProvider).getUserBattlesStream(userId).map((battles) {
-    return battles.where((b) => b.status == BattleStatus.completed || b.status == BattleStatus.declined).toList();
+    return battles.where((b) => b.status == BattleStatus.completed || b.status == BattleStatus.declined || b.status == BattleStatus.rejected).toList();
   });
 });
 
@@ -76,48 +76,33 @@ class BattleService {
   Stream<List<MoveModel>> getMovesStream(String battleId) {
     return _battleCollection
         .doc(battleId)
-        .collection('moves') // Ensure this subcollection name is correct
-        .orderBy('submittedAt', descending: true)
+        .collection('moves') 
+        .orderBy('submittedAt', descending: false) 
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => MoveModel.fromMap(doc.data()!, doc.id)) 
+            .map((doc) => MoveModel.fromMap(doc.data(), doc.id)) 
             .toList())
-        .handleError((error) {
-          print('Error in getMovesStream: $error');
-          return <MoveModel>[];
-        })
         .startWith(const []); // Start with empty list
   }
 
-  // Fetches all battles for a given user (Challenger OR Opponent)
+  // This is the working, non-spinning stream logic
   Stream<List<BattleModel>> getUserBattlesStream(String userId) {
-    // 1. Get battles where user is challenger
     final challengerStream = _battleCollection
         .where('challengerUid', isEqualTo: userId)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => BattleModel.fromMap(doc.data()! as Map<String, dynamic>, id: doc.id)) 
+            .map((doc) => BattleModel.fromMap(doc.data() as Map<String, dynamic>, id: doc.id)) 
             .toList())
-        .handleError((error) {
-          print('Error in challengerStream: $error');
-          return <BattleModel>[];
-        })
-        .startWith(const []); // FIX: Emit an empty list immediately
+        .startWith(const []); 
 
-    // 2. Get battles where user is opponent
     final opponentStream = _battleCollection
         .where('opponentUid', isEqualTo: userId)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => BattleModel.fromMap(doc.data()! as Map<String, dynamic>, id: doc.id)) 
+            .map((doc) => BattleModel.fromMap(doc.data() as Map<String, dynamic>, id: doc.id)) 
             .toList())
-        .handleError((error) {
-          print('Error in opponentStream: $error');
-          return <BattleModel>[];
-        })
-        .startWith(const []); // FIX: Emit an empty list immediately
+        .startWith(const []); 
 
-    // 3. Combine streams using rxdart
     return Rx.combineLatest2(
       challengerStream,
       opponentStream,
@@ -132,22 +117,14 @@ class BattleService {
           battlesMap[battle.id!] = battle;
         }
         
-        // This stream provides ALL battles (active, pending, completed, etc.)
         final allBattles = battlesMap.values.toList();
-        
-        // Sort by creation date (newest first)
         allBattles.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return allBattles;
       }
-    ).handleError((error) {
-      print('Error in combineLatest2: $error');
-      return <BattleModel>[];
-    });
+    );
   }
 
-  // Retrieves only completed battles for a given user
   Stream<List<BattleModel>> getUserCompletedBattlesStream(String uid) {
-     // 1. Get completed as challenger
      final challengerStream = _battleCollection
         .where('challengerUid', isEqualTo: uid)
         .where('status', isEqualTo: BattleStatus.completed.name)
@@ -155,13 +132,8 @@ class BattleService {
         .map((snapshot) => snapshot.docs
             .map((doc) => BattleModel.fromMap(doc.data() as Map<String, dynamic>, id: doc.id)) 
             .toList())
-        .handleError((error) {
-          print('Error in completed challengerStream: $error');
-          return <BattleModel>[];
-        })
-        .startWith(const []); // FIX: Emit an empty list immediately
+        .startWith(const []); 
 
-    // 2. Get completed as opponent
     final opponentStream = _battleCollection
         .where('opponentUid', isEqualTo: uid)
         .where('status', isEqualTo: BattleStatus.completed.name)
@@ -169,13 +141,8 @@ class BattleService {
         .map((snapshot) => snapshot.docs
             .map((doc) => BattleModel.fromMap(doc.data() as Map<String, dynamic>, id: doc.id)) 
             .toList())
-        .handleError((error) {
-          print('Error in completed opponentStream: $error');
-          return <BattleModel>[];
-        })
-        .startWith(const []); // FIX: Emit an empty list immediately
+        .startWith(const []); 
         
-    // 3. Combine streams
     return Rx.combineLatest2(
       challengerStream,
       opponentStream,
@@ -188,10 +155,7 @@ class BattleService {
         completedBattles.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return completedBattles;
       }
-    ).handleError((error) {
-      print('Error in completed combineLatest2: $error');
-      return <BattleModel>[];
-    });
+    );
   }
 
   Future<BattleModel?> getBattleById(String battleId) async {
@@ -206,14 +170,14 @@ class BattleService {
   // Actions
   // ----------------------------------------------------
 
-  Future<void> createBattle({ // Changed from challengeUser to createBattle
+  Future<void> createBattle({
     required String challengerUid,
     required String opponentUid,
     required String genre,
     required int maxRounds,
   }) async {
     final newBattle = BattleModel(
-      id: '', // Firestore will assign
+      id: '', 
       challengerUid: challengerUid,
       opponentUid: opponentUid,
       status: BattleStatus.pending,
@@ -242,14 +206,29 @@ class BattleService {
   }
 
   Future<void> declineChallenge(String battleId) async {
+    final battle = await getBattleById(battleId); // Get battle details first
+    if (battle == null) return;
+
     await _battleCollection.doc(battleId).update({
-      'status': BattleStatus.declined.name,
+        'status': BattleStatus.declined.name,
     });
     
-    final battle = await getBattleById(battleId);
-    if (battle != null) {
-      await _activityService.logChallengeDeclined(battle.id!, battle.challengerUid, battle.opponentUid);
-    }
+    await _activityService.logChallengeDeclined(battle.id!, battle.challengerUid, battle.opponentUid);
+  }
+
+  // --- NEW METHOD ---
+  Future<void> cancelChallenge(String battleId) async {
+    final battle = await getBattleById(battleId); // Get battle details first
+    if (battle == null) return;
+
+    // We change the status to 'rejected' so it shows up in the 'completed' feed
+    // for the opponent, rather than just disappearing.
+    await _battleCollection.doc(battleId).update({
+      'status': BattleStatus.rejected.name, 
+    });
+    
+    // Log this action
+    await _activityService.logChallengeCanceled(battle.id!, battle.challengerUid, battle.opponentUid);
   }
 
   Future<void> submitMove(BattleModel battle, MoveModel move) async {
@@ -287,7 +266,7 @@ class BattleService {
         } else {
           // This was the last move of the last round
           nextStatus = BattleStatus.completed;
-          isFinalMove = true;
+          isFinalMove = true; 
         }
       }
 
@@ -305,7 +284,7 @@ class BattleService {
     
     // Trigger judging *after* the transaction is complete
     if (isFinalMove) {
-      await finalizeBattle(battle.id!); // Call the public method
+      await finalizeBattle(battle.id!); 
     }
   }
   
@@ -331,7 +310,6 @@ class BattleService {
     });
   }
 
-  // --- NEW: Method to total votes and finalize the battle ---
   Future<void> finalizeBattle(String battleId) async {
     // 1. Get the battle
     final battle = await getBattleById(battleId);
