@@ -5,9 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/navigation_provider.dart'; 
 
+// Import services to check for notifications
+import '../../services/auth_service.dart';
+import '../../services/battle_service.dart';
+import '../../services/friend_service.dart';
+import '../../models/battle_model.dart';
+
 // Import all the screens for the tabs
 import 'dashboard_screen.dart';
-import 'battles_screen.dart';     // FIX: Added BattlesScreen import
+import 'battles_screen.dart';
 import 'search_screen.dart';
 import 'leaderboard_screen.dart'; 
 import 'friends_screen.dart';     
@@ -17,69 +23,95 @@ import 'profile_screen.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  // FIX: Made the list 'static const' AND added all 7 pages
+  // This list holds the widgets for each tab
   static const List<Widget> _pages = [
     DashboardScreen(),    // Index 0
     BattlesScreen(),      // Index 1
-    SearchScreen(),     // Index 2
-    LeaderboardScreen(),// Index 3
-    FriendsScreen(),    // Index 4
-    ActivityScreen(),   // Index 5
-    ProfileScreen(),    // Index 6
+    SearchScreen(),       // Index 2
+    LeaderboardScreen(),  // Index 3
+    FriendsScreen(),      // Index 4
+    ActivityScreen(),     // Index 5
+    ProfileScreen(),      // Index 6
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch the centralized provider for the current tab index
     final selectedIndex = ref.watch(homeTabIndexProvider);
+    final currentUid = ref.watch(authStateChangesProvider).value?.uid;
+
+    // --- NOTIFICATION LOGIC ---
+    bool showBattleBadge = false;
+    bool showFriendBadge = false;
+
+    if (currentUid != null) {
+      // 1. Check for Battle Notifications (My Turn or Pending Challenge)
+      final battlesAsync = ref.watch(userActiveBattlesStreamProvider(currentUid));
+      
+      battlesAsync.whenData((battles) {
+        // Check if there are ANY battles where it's my turn OR I have a pending challenge
+        final hasActionableBattle = battles.any((b) {
+           final isMyTurn = b.status == BattleStatus.active && b.currentTurnUid == currentUid;
+           final isPendingChallenge = b.status == BattleStatus.pending && b.opponentUid == currentUid;
+           return isMyTurn || isPendingChallenge;
+        });
+        if (hasActionableBattle) showBattleBadge = true;
+      });
+
+      // 2. Check for Friend Request Notifications
+      final friendRequestsAsync = ref.watch(friendRequestsStreamProvider(currentUid));
+      
+      friendRequestsAsync.whenData((requests) {
+        if (requests.isNotEmpty) showFriendBadge = true;
+      });
+    }
+    // --------------------------
 
     return Scaffold(
-      // Display the page that corresponds to the selected index
       body: _pages[selectedIndex],
       
       bottomNavigationBar: BottomNavigationBar(
-        // Set the current index from the provider
         currentIndex: selectedIndex,
-        
-        // This is the function that updates the provider when a tab is tapped
         onTap: (index) {
           ref.read(homeTabIndexProvider.notifier).state = index;
         },
         
-        // --- Styling for the navigation bar ---
-        type: BottomNavigationBarType.fixed, // Allows more than 3 items
+        type: BottomNavigationBarType.fixed, 
         selectedItemColor: Theme.of(context).primaryColor,
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
-        // ------------------------------------
         
-        // FIX: Added all 7 items to the navigation bar
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
+          // BATTLES TAB (With Badge)
           BottomNavigationBarItem(
-            icon: Icon(Icons.bolt), // Battles icon
+            icon: showBattleBadge 
+                ? const Badge(child: Icon(Icons.bolt)) 
+                : const Icon(Icons.bolt),
             label: 'Battles',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.search),
             label: 'Search',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.leaderboard),
             label: 'Rankings',
           ),
+          // FRIENDS TAB (With Badge)
           BottomNavigationBarItem(
-            icon: Icon(Icons.people), // Friends icon
+            icon: showFriendBadge 
+                ? const Badge(child: Icon(Icons.people)) 
+                : const Icon(Icons.people),
             label: 'Friends',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.notifications),
             label: 'Activity',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: 'Profile',
           ),
