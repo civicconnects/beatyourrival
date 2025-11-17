@@ -6,19 +6,22 @@ class MoveModel {
   final String id;
   final String title;
   final String link;
-  final String submittedByUid; // FIX: This is the correct field name
+  final String submittedByUid;
   final int round;
   final DateTime submittedAt;
-  final List<String> votes; // FIX: Added votes list
+  
+  // FIX: Changed from List<String> to Map<String, int>
+  // Key = UserID, Value = Score (1-10)
+  final Map<String, int> votes; 
 
   MoveModel({
     required this.id,
     required this.title,
     required this.link,
-    required this.submittedByUid, // FIX: Use submittedByUid
+    required this.submittedByUid,
     required this.round,
     required this.submittedAt,
-    this.votes = const [],
+    this.votes = const {}, // Default to empty map
   });
 
   Map<String, dynamic> toMap() {
@@ -28,7 +31,7 @@ class MoveModel {
       'submittedByUid': submittedByUid,
       'round': round,
       'submittedAt': Timestamp.fromDate(submittedAt), 
-      'votes': votes,
+      'votes': votes, 
     };
   }
 
@@ -39,20 +42,30 @@ class MoveModel {
       return DateTime.now(); 
     }
     
-    final List<String> votesList = (map['votes'] as List<dynamic>?)
-        ?.map((item) => item as String)
-        .toList() ?? [];
+    // FIX: Safe parsing for the votes Map
+    Map<String, int> parsedVotes = {};
+    if (map['votes'] != null) {
+      Map<String, dynamic> rawVotes = map['votes'] as Map<String, dynamic>;
+      rawVotes.forEach((key, value) {
+        parsedVotes[key] = (value as num).toInt();
+      });
+    }
 
     return MoveModel(
       id: id, 
       title: map['title'] as String? ?? 'Untitled Move',
       link: map['link'] as String? ?? '',
-      // FIX: Read 'submittedByUid' OR the old 'userId' for compatibility
       submittedByUid: map['submittedByUid'] as String? ?? map['userId'] as String? ?? 'unknown',
       round: map['round'] as int? ?? 1,
-      submittedAt: parseDate(map['submittedAt'] ?? map['timestamp']), // Handle old field name
-      votes: votesList,
+      submittedAt: parseDate(map['submittedAt'] ?? map['timestamp']),
+      votes: parsedVotes,
     );
+  }
+  
+  // Helper to get total score
+  int get totalScore {
+    if (votes.isEmpty) return 0;
+    return votes.values.reduce((a, b) => a + b);
   }
 }
 // --- END COPY & PASTE HERE ---

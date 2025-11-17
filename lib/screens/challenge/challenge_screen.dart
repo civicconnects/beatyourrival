@@ -17,7 +17,9 @@ class ChallengeScreen extends ConsumerStatefulWidget {
 
 class _ChallengeScreenState extends ConsumerState<ChallengeScreen> {
   String? _selectedGenre;
-  int _selectedRounds = 3;
+  
+  // FIX: Default is now 1
+  int _selectedRounds = 1;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +62,9 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen> {
 
   void _showChallengeDialog(
       BuildContext context, WidgetRef ref, String challengerUid, UserModel opponent) {
+    // Reset rounds to 1 every time the dialog opens
+    _selectedRounds = 1;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -68,13 +73,12 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen> {
             return AlertDialog(
               title: Text('Challenge ${opponent.username}'),
               content: Column(
-                // FIX: Corrected typo from MainAxisSizeC to MainAxisSize
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(labelText: 'Select Genre'),
                     value: _selectedGenre,
-                    items: ['Rock', 'Hip Hop', 'Electronic', 'Pop', 'Reggae']
+                    items: ['Hip Hop', 'Pop', 'Rock', 'R&B', 'Electronic', 'Country', 'Jazz', 'Classical', 'Reggae', 'Latin', 'Blues', 'Metal', 'Folk', 'Soul', 'Punk', 'Disco', 'House', 'Techno', 'Dubstep', 'Trap', 'Funk', 'Gospel', 'Indie', 'Alternative', 'K-Pop', 'J-Pop', 'Reggaeton', 'Ska', 'Grunge', 'Emo']
                         .map((genre) => DropdownMenuItem(value: genre, child: Text(genre)))
                         .toList(),
                     onChanged: (value) => setState(() => _selectedGenre = value),
@@ -84,10 +88,15 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen> {
                   DropdownButtonFormField<int>(
                     decoration: const InputDecoration(labelText: 'Number of Rounds'),
                     value: _selectedRounds,
-                    items: [3, 5, 7, 9]
+                    // FIX: Explicitly added 1 to this list
+                    items: [1, 3, 5, 7, 9]
                         .map((rounds) => DropdownMenuItem(value: rounds, child: Text('$rounds Rounds')))
                         .toList(),
-                    onChanged: (value) => setState(() => _selectedRounds = value!),
+                    onChanged: (value) {
+                       if(value != null) {
+                         setState(() => _selectedRounds = value);
+                       }
+                    },
                   ),
                 ],
               ),
@@ -114,7 +123,7 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Challenge sent to ${opponent.username} for $_selectedRounds rounds of $_selectedGenre!')),
                             );
-                            ref.read(homeTabIndexProvider.notifier).state = 2; // Navigate to Battles tab
+                            ref.read(homeTabIndexProvider.notifier).state = 1; // Navigate to Battles tab
                           }
                         },
                   child: const Text('Send Challenge'),
