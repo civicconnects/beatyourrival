@@ -137,7 +137,6 @@ class ProfileScreen extends ConsumerWidget {
                   activeColor: Colors.blue,
                   secondary: Icon(targetUser.isStatsPublic ? Icons.visibility : Icons.visibility_off),
                 ),
-                // NEW: Go Silent Toggle
                 SwitchListTile(
                   title: const Text('Go Silent Mode', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
                   subtitle: Text(targetUser.isSilentMode ? 'Notifications OFF' : 'Notifications ON'),
@@ -206,6 +205,7 @@ class ProfileScreen extends ConsumerWidget {
     }
     
     if (hasSentRequest) {
+      // FIX: Removed 'const' from Center because ElevatedButton is not const
       return Center(
         child: ElevatedButton.icon(
           icon: const Icon(Icons.send, size: 16),
