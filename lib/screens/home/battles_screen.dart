@@ -40,26 +40,43 @@ class BattlesScreen extends ConsumerWidget {
       ),
       body: battlesAsyncValue.when(
         data: (battles) {
+          // FIX: Handle empty list with Pull-to-Refresh
           if (battles.isEmpty) {
-            return const Center(child: Text('You have no active or pending battles. Challenge someone!'));
+            return RefreshIndicator(
+              onRefresh: () async {
+                return ref.refresh(userActiveBattlesStreamProvider(currentUserId));
+              },
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 300),
+                  Center(child: Text('You have no active or pending battles. Challenge someone!')),
+                ],
+              ),
+            );
           }
 
-          return ListView.builder(
-            itemCount: battles.length,
-            itemBuilder: (context, index) {
-              final battle = battles[index];
-              final isChallenger = battle.challengerUid == currentUserId;
-              // Get the *other* person's ID
-              final opponentId = isChallenger ? battle.opponentUid : battle.challengerUid;
-
-              // Use the new helper widget to display the battle
-              return _BattleListTile(
-                battle: battle,
-                opponentId: opponentId,
-                isChallenger: isChallenger,
-                currentUserId: currentUserId,
-              );
+          // FIX: Wrap list in RefreshIndicator
+          return RefreshIndicator(
+            onRefresh: () async {
+              return ref.refresh(userActiveBattlesStreamProvider(currentUserId));
             },
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: battles.length,
+              itemBuilder: (context, index) {
+                final battle = battles[index];
+                final isChallenger = battle.challengerUid == currentUserId;
+                final opponentId = isChallenger ? battle.opponentUid : battle.challengerUid;
+
+                return _BattleListTile(
+                  battle: battle,
+                  opponentId: opponentId,
+                  isChallenger: isChallenger,
+                  currentUserId: currentUserId,
+                );
+              },
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -112,7 +129,7 @@ class _BattleListTile extends ConsumerWidget {
             subtitle: Text(
               'Status: ${battle.status.toString().split('.').last.toUpperCase()}',
             ),
-            trailing: _buildTrailingWidget(context, ref, battle, isChallenger), // FIX: Pass context
+            trailing: _buildTrailingWidget(context, ref, battle, isChallenger),
             onTap: () {
               if (battle.id != null) {
                 Navigator.of(context).push(
@@ -127,33 +144,24 @@ class _BattleListTile extends ConsumerWidget {
       },
       loading: () => const Card(
         margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        child: ListTile(
-          title: Text('Loading Rival...'),
-          subtitle: Text('Status: ...'),
-        ),
+        child: ListTile(title: Text('Loading...')),
       ),
       error: (err, stack) => Card(
         margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        child: ListTile(
-          title: const Text('Error Loading Rival'),
-          subtitle: Text(err.toString()),
-        ),
+        child: ListTile(title: const Text('Error'), subtitle: Text(err.toString())),
       ),
     );
   }
 
-  // --- WIDGET WITH THE FIX ---
   Widget _buildTrailingWidget(BuildContext context, WidgetRef ref, BattleModel battle, bool isChallenger) {
     final battleService = ref.read(battleServiceProvider);
 
     if (battle.status == BattleStatus.pending) {
       if (isChallenger) {
-        // FIX: If I am the challenger, I can cancel
         return IconButton(
           icon: const Icon(Icons.close, color: Colors.red),
           tooltip: 'Cancel Challenge',
           onPressed: () async {
-            // Show confirmation dialog
             final shouldCancel = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
@@ -178,7 +186,6 @@ class _BattleListTile extends ConsumerWidget {
           },
         );
       } else {
-        // Opponent (the current user) needs to accept or decline
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [

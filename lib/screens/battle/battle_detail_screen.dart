@@ -140,9 +140,6 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
         currentUid,
         score 
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vote cast!')));
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -220,11 +217,6 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
             ? battle.opponentUid
             : battle.challengerUid;
 
-        // Determine User Roles
-        final bool isParticipant = (currentUserId == battle.challengerUid || currentUserId == battle.opponentUid);
-        final bool isSpectator = !isParticipant;
-        final bool isMyTurn = battle.currentTurnUid == currentUserId;
-
         return ref.watch(userProfileFutureProvider(opponentId)).when(
               loading: () => Scaffold(
                 appBar: AppBar(title: const Text('Loading Rival...')),
@@ -236,45 +228,29 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
               ),
               data: (opponentProfile) {
                 final opponentUsername = opponentProfile?.username ?? 'Unknown Rival';
+                final isMyTurn = battle.currentTurnUid == currentUserId;
                 
                 final bool isBattleOverAndUnjudged = battle.status == BattleStatus.completed && battle.winnerUid == null;
 
                 final List<Widget> bodyWidgets = [
-                    _buildBattleHeader(battle, isSpectator),
+                    _buildBattleHeader(battle),
                     const Divider(height: 32),
                 ];
                 
-                // --- WIDGET LOGIC ---
                 if (battle.status == BattleStatus.completed && battle.winnerUid != null) {
-                  // 1. Battle Finished & Judged
-                  bodyWidgets.add(_buildFinalScore(context, battle, currentUserId, opponentUsername, isSpectator));
+                  bodyWidgets.add(_buildFinalScore(context, battle, currentUserId, opponentUsername));
                 }
                 else if (isBattleOverAndUnjudged) {
-                  // 2. Battle Finished, Needs Judging
-                  if (isParticipant) {
-                    bodyWidgets.add(_buildFinalizeButton(battle));
-                  } else {
-                     bodyWidgets.add(const Center(child: Text("Voting in progress... cast your vote below!", style: TextStyle(fontStyle: FontStyle.italic))));
-                  }
+                  bodyWidgets.add(_buildFinalizeButton(battle));
                 }
-                else if (battle.status == BattleStatus.active) {
-                  // 3. Active Battle
-                  if (isMyTurn && isParticipant) {
-                    bodyWidgets.add(_buildSubmissionForm(battle));
-                  } else {
-                     String msg = isSpectator 
-                        ? "Battle in progress. Round ${battle.currentRound}." 
-                        : "Waiting for $opponentUsername to submit their move...";
-                     bodyWidgets.add(_buildInfoMessage(msg, Icons.hourglass_empty));
-                  }
+                else if (battle.status == BattleStatus.active && isMyTurn) {
+                  bodyWidgets.add(_buildSubmissionForm(battle));
+                }
+                else if (battle.status == BattleStatus.active && !isMyTurn) {
+                  bodyWidgets.add(_buildWaitingMessage(context, opponentUsername));
                 }
                 else if (battle.status == BattleStatus.pending) {
-                  // 4. Pending Challenge
-                  if (isSpectator) {
-                     bodyWidgets.add(_buildInfoMessage("Challenge Pending Acceptance.", Icons.pending));
-                  } else {
-                     bodyWidgets.add(_buildPendingMessage(battle, currentUserId, opponentUsername));
-                  }
+                  bodyWidgets.add(_buildPendingMessage(battle, currentUserId, opponentUsername));
                 }
                 
                 bodyWidgets.addAll([
@@ -289,7 +265,7 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
 
                 return Scaffold(
                   appBar: AppBar(
-                    title: Text(isSpectator ? 'Spectating Battle' : 'vs $opponentUsername'),
+                    title: Text('vs $opponentUsername'),
                     centerTitle: true,
                   ),
                   body: ListView(
@@ -300,21 +276,6 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
               },
             );
       },
-    );
-  }
-
-  Widget _buildInfoMessage(String message, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(children: [
-        Icon(icon, color: Colors.grey),
-        const SizedBox(width: 12),
-        Expanded(child: Text(message, style: TextStyle(color: Colors.grey.shade800))),
-      ]),
     );
   }
 
@@ -353,10 +314,16 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Cancel Challenge?'),
-                  content: const Text('Are you sure you want to cancel this challenge?'),
+                  content: const Text('Are you sure you want to cancel this challenge? This cannot be undone.'),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-                    TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes, Cancel')),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('No'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Yes, Cancel'),
+                    ),
                   ],
                 ),
               );
@@ -401,7 +368,33 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
     }
   }
 
-  Widget _buildBattleHeader(BattleModel battle, bool isSpectator) {
+  Widget _buildBattleHeader(BattleModel battle) {
+    String statusText;
+    Color statusColor;
+
+    switch (battle.status) {
+      case BattleStatus.active:
+        statusText = 'Active Battle';
+        statusColor = Colors.green;
+        break;
+      case BattleStatus.pending:
+        statusText = 'Pending Challenge';
+        statusColor = Colors.orange;
+        break;
+      case BattleStatus.completed:
+        statusText = 'Battle Finished';
+        statusColor = Colors.red;
+        break;
+      case BattleStatus.declined:
+        statusText = 'Challenge Declined';
+        statusColor = Colors.grey;
+        break;
+      case BattleStatus.rejected:
+        statusText = 'Challenge Rejected';
+        statusColor = Colors.grey;
+        break;
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -415,67 +408,50 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
                 style: const TextStyle(fontSize: 16)),
           ],
         ),
-        Row(
-          children: [
-             if (isSpectator) 
-               Container(
-                 margin: const EdgeInsets.only(right: 8),
-                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                 decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(4)),
-                 child: Text("SPECTATING", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade700)),
-               ),
-             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                battle.status.toString().split('.').last.toUpperCase(),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            ),
-          ],
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            statusText.toUpperCase(),
+            style: TextStyle(
+                color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildFinalScore(BuildContext context, BattleModel battle, String currentUserId, String opponentUsername, bool isSpectator) {
-    // If spectator, we don't say "YOU WON", we say who won.
-    // But for simplicity in this snippet, we show the neutral score.
-    
+  Widget _buildFinalScore(BuildContext context, BattleModel battle, String currentUserId, String opponentUsername) {
     final bool isWinner = battle.winnerUid == currentUserId;
     final bool isDraw = battle.winnerUid == 'Draw';
     
-    // Logic to find scores needs to be neutral if spectator
-    int myScore = 0;
-    int opponentScore = 0;
-    
-    if (isSpectator) {
-       // For spectator: myScore = challenger, opponentScore = opponent
-       myScore = battle.challengerFinalScore ?? 0;
-       opponentScore = battle.opponentFinalScore ?? 0;
-    } else {
-       myScore = (battle.challengerUid == currentUserId) ? (battle.challengerFinalScore ?? 0) : (battle.opponentFinalScore ?? 0);
-       opponentScore = (battle.challengerUid == currentUserId) ? (battle.opponentFinalScore ?? 0) : (battle.challengerFinalScore ?? 0);
-    }
+    final int myScore = (battle.challengerUid == currentUserId)
+        ? (battle.challengerFinalScore ?? 0)
+        : (battle.opponentFinalScore ?? 0);
+        
+    final int opponentScore = (battle.challengerUid == currentUserId)
+        ? (battle.opponentFinalScore ?? 0)
+        : (battle.challengerFinalScore ?? 0);
 
     String resultText;
     Color resultColor;
+    IconData resultIcon;
     
     if (isDraw) {
-      resultText = 'DRAW';
+      resultText = 'The battle was a Draw!';
       resultColor = Colors.grey.shade700;
-    } else if (isSpectator) {
-       resultText = 'BATTLE FINISHED'; // Neutral for spectator
-       resultColor = Colors.blueGrey;
+      resultIcon = Icons.handshake;
     } else if (isWinner) {
-      resultText = 'YOU WON!';
+      resultText = 'You are the Winner!';
       resultColor = Colors.green.shade700;
+      resultIcon = Icons.emoji_events;
     } else {
-      resultText = 'YOU LOST';
+      resultText = 'You were defeated.';
       resultColor = Colors.red.shade700;
+      resultIcon = Icons.warning;
     }
 
     return Container(
@@ -487,24 +463,58 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
       ),
       child: Column(
         children: [
-          Text(resultText, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: resultColor)),
-          const SizedBox(height: 4),
-          if (isSpectator)
-             Text('Challenger: $myScore - Opponent: $opponentScore', style: const TextStyle(fontSize: 16))
-          else
-             Text('Final Score: $myScore - $opponentScore', style: const TextStyle(fontSize: 16)),
+          Icon(resultIcon, color: resultColor, size: 40),
+          const SizedBox(height: 8),
+          Text(
+            resultText,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: resultColor),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Final Score: $myScore (You) - $opponentScore ($opponentUsername)',
+            style: const TextStyle(fontSize: 16),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildFinalizeButton(BattleModel battle) {
-    return ElevatedButton(
-      onPressed: _isFinalizing ? null : () => _handleFinalizeBattle(battle),
-      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-      child: _isFinalizing
-        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
-        : const Text('Tally Votes & Finalize Battle'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                'The battle is complete! All moves are in.',
+                style: TextStyle(fontSize: 16, color: Colors.blueGrey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Cast your votes now. When ready, a participant can finalize the battle.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _isFinalizing ? null : () => _handleFinalizeBattle(battle),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                child: _isFinalizing
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
+                  : const Text('Tally Votes & Finalize Battle'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -559,8 +569,17 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
               labelText: 'Track Link (e.g., YouTube URL)',
               border: OutlineInputBorder(),
             ),
-            validator: (value) =>
-                value!.isEmpty ? 'Please enter a track link' : null,
+            // FIX: Validation for URL
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a track link';
+              }
+              final uri = Uri.tryParse(value);
+              if (uri == null || !uri.hasAbsolutePath) {
+                return 'Please enter a valid URL (http://...)';
+              }
+              return null;
+            },
             onSaved: (value) => _trackLinkController.text = value ?? '',
           ),
           const SizedBox(height: 20),
@@ -622,15 +641,10 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
           );
 
           for (var move in movesInRound) {
-            final isMine = move.submittedByUid == currentUserId;
-            // If I'm the user, senderName is "You". If opponent, it's their name.
-            // If I'm a spectator, neither is "You".
-            String senderName;
-            if (move.submittedByUid == currentUserId) senderName = 'You';
-            else if (move.submittedByUid == battle.challengerUid) senderName = 'Challenger'; // Or fetch name
-            else senderName = 'Opponent'; // Or fetch name
-
+            final isMine = move.submittedByUid == currentUserId; 
+            final senderName = isMine ? 'You' : opponentUsername;
             final hasVoted = move.votes.containsKey(currentUserId);
+            final int myScore = move.votes[currentUserId] ?? 0;
 
             moveWidgets.add(
               Card(
@@ -643,18 +657,15 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Display Total Score
                       Text('${move.totalScore} pts', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                       const SizedBox(width: 8),
-                      
-                      // Vote Button (Visible to everyone except the person who made the move)
                       if (!isMine)
                         IconButton(
                           icon: Icon(
                             hasVoted ? Icons.star : Icons.star_border,
                             color: hasVoted ? Colors.orange : Colors.grey,
                           ),
-                          tooltip: 'Rate this move',
+                          tooltip: hasVoted ? 'You rated this $myScore/10' : 'Rate this move',
                           onPressed: () {
                             _showRatingDialog(move.id); 
                           },

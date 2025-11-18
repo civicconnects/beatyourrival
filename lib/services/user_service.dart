@@ -121,10 +121,16 @@ class UserService {
     });
   }
 
-  // --- NEW: Update privacy setting ---
   Future<void> updateUserStatsVisibility(String uid, bool isPublic) async {
     await _firestore.collection(_collection).doc(uid).update({
       'isStatsPublic': isPublic,
+    });
+  }
+
+  // --- NEW: Update silent mode ---
+  Future<void> updateUserSilentMode(String uid, bool isSilent) async {
+    await _firestore.collection(_collection).doc(uid).update({
+      'isSilentMode': isSilent,
     });
   }
 }

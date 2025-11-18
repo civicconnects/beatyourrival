@@ -83,7 +83,6 @@ class ProfileScreen extends ConsumerWidget {
            return const Center(child: Text('Authenticating...'));
         }
         
-        // Logic: Show stats if it's ME, OR if the user has set stats to PUBLIC
         final bool showStats = (targetUid == null) || targetUser.isStatsPublic;
         
         return Padding(
@@ -128,7 +127,6 @@ class ProfileScreen extends ConsumerWidget {
                   activeColor: Colors.green,
                   secondary: Icon(targetUser.isReadyToBattle ? Icons.shield : Icons.shield_outlined),
                 ),
-                // NEW: Privacy Toggle
                 SwitchListTile(
                   title: const Text('Show Win/Loss Record', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
                   subtitle: Text(targetUser.isStatsPublic ? 'Visible to everyone' : 'Private (Hidden)'),
@@ -139,10 +137,20 @@ class ProfileScreen extends ConsumerWidget {
                   activeColor: Colors.blue,
                   secondary: Icon(targetUser.isStatsPublic ? Icons.visibility : Icons.visibility_off),
                 ),
+                // NEW: Go Silent Toggle
+                SwitchListTile(
+                  title: const Text('Go Silent Mode', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                  subtitle: Text(targetUser.isSilentMode ? 'Notifications OFF' : 'Notifications ON'),
+                  value: targetUser.isSilentMode,
+                  onChanged: (bool isSilent) {
+                    ref.read(userServiceProvider).updateUserSilentMode(targetUser.uid, isSilent);
+                  },
+                  activeColor: Colors.orange,
+                  secondary: Icon(targetUser.isSilentMode ? Icons.notifications_off : Icons.notifications_active),
+                ),
                 const Divider(height: 32),
               ],
 
-              // --- STATS DISPLAY ---
               _buildInfoRow('ELO Rating', targetUser.eloScore.toStringAsFixed(0), Icons.star),
               _buildInfoRow('Total Battles', targetUser.totalBattles.toString(), Icons.military_tech),
               
@@ -202,7 +210,7 @@ class ProfileScreen extends ConsumerWidget {
         child: ElevatedButton.icon(
           icon: const Icon(Icons.send, size: 16),
           label: const Text('Friend Request Sent'),
-          onPressed: null,
+          onPressed: null, 
         ),
       );
     }

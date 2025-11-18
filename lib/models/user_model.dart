@@ -14,10 +14,11 @@ class UserModel {
   final DateTime createdAt;
   final bool isOnline;
   final bool isReadyToBattle;
-  
-  // --- NEW PRIVACY FIELD ---
   final bool isStatsPublic; 
-  // ------------------------
+  
+  // --- NEW FIELD: Silent Mode ---
+  final bool isSilentMode;
+  // -----------------------------
 
   final List<String> friends;
   final List<String> friendRequests;
@@ -34,7 +35,8 @@ class UserModel {
     required this.createdAt,
     this.isOnline = false,
     this.isReadyToBattle = false,
-    this.isStatsPublic = true, // Default to public
+    this.isStatsPublic = true,
+    this.isSilentMode = false, // Default is OFF (receive notifications)
     this.friends = const [], 
     this.friendRequests = const [], 
   });
@@ -51,7 +53,8 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'isOnline': isOnline,
       'isReadyToBattle': isReadyToBattle,
-      'isStatsPublic': isStatsPublic, // Add to map
+      'isStatsPublic': isStatsPublic,
+      'isSilentMode': isSilentMode, // Add to map
       'friends': friends, 
       'friendRequests': friendRequests, 
     };
@@ -75,7 +78,8 @@ class UserModel {
       createdAt: (map['createdAt'] as Timestamp? ?? Timestamp.now()).toDate(),
       isOnline: map['isOnline'] as bool? ?? false,
       isReadyToBattle: map['isReadyToBattle'] as bool? ?? false,
-      isStatsPublic: map['isStatsPublic'] as bool? ?? true, // Add to factory
+      isStatsPublic: map['isStatsPublic'] as bool? ?? true,
+      isSilentMode: map['isSilentMode'] as bool? ?? false, // Add to factory
       friends: _castList(map['friends']), 
       friendRequests: _castList(map['friendRequests']), 
     );
