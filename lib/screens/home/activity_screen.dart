@@ -70,7 +70,6 @@ class _ActivityTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // We need to fetch the user profiles to display their names
-    // FIX: This now uses activity.actorUid, which exists
     final actorProfileAsync = ref.watch(userProfileFutureProvider(activity.actorUid));
     
     // Not all activities have a target user, so we handle null
@@ -100,6 +99,7 @@ class _ActivityTile extends ConsumerWidget {
     final String actor = actorName ?? 'Someone';
     final String target = targetName ?? 'someone';
     final String time = timeago.format(activity.timestamp);
+    final currentUserId = ref.watch(authStateChangesProvider).value?.uid;
 
     IconData icon;
     String titleText;
@@ -108,7 +108,9 @@ class _ActivityTile extends ConsumerWidget {
     switch (activity.type) {
       case ActivityType.challengeSent:
         icon = Icons.send;
-        titleText = '$actor challenged $target.';
+        titleText = (activity.actorUid == currentUserId) 
+            ? 'You challenged $target.' 
+            : '$actor challenged you.';
         onTap = () {
           if (activity.battleId != null) {
             Navigator.of(context).push(MaterialPageRoute(
@@ -119,7 +121,9 @@ class _ActivityTile extends ConsumerWidget {
         break;
       case ActivityType.challengeAccepted:
         icon = Icons.check_circle_outline;
-        titleText = '$actor accepted $target\'s challenge.';
+        titleText = (activity.actorUid == currentUserId)
+            ? 'You accepted $target\'s challenge.'
+            : '$actor accepted your challenge.';
         onTap = () {
           if (activity.battleId != null) {
             Navigator.of(context).push(MaterialPageRoute(
@@ -130,7 +134,9 @@ class _ActivityTile extends ConsumerWidget {
         break;
       case ActivityType.challengeDeclined:
         icon = Icons.cancel_outlined;
-        titleText = '$actor declined $target\'s challenge.';
+        titleText = (activity.actorUid == currentUserId)
+            ? 'You declined $target\'s challenge.'
+            : '$actor declined your challenge.';
         onTap = () {
           Navigator.of(context).push(MaterialPageRoute(
             builder: (context) => ProfileScreen(targetUid: activity.actorUid),
@@ -139,7 +145,9 @@ class _ActivityTile extends ConsumerWidget {
         break;
       case ActivityType.challengeCanceled:
         icon = Icons.block;
-        titleText = '$actor canceled their challenge to $target.';
+        titleText = (activity.actorUid == currentUserId)
+            ? 'You canceled your challenge to $target.'
+            : '$actor canceled their challenge.';
         onTap = () {
           Navigator.of(context).push(MaterialPageRoute(
             builder: (context) => ProfileScreen(targetUid: activity.actorUid),
@@ -153,8 +161,10 @@ class _ActivityTile extends ConsumerWidget {
         if (activity.actorUid == 'Draw') {
           titleText = 'A battle between $loser and $target ended in a Draw!';
           icon = Icons.handshake;
+        } else if (activity.actorUid == currentUserId) {
+          titleText = 'You defeated $target in a battle!';
         } else {
-          titleText = '$winner defeated $loser in a battle!';
+          titleText = '$actor defeated you in a battle.';
         }
         onTap = () {
           if (activity.battleId != null) {
@@ -168,16 +178,18 @@ class _ActivityTile extends ConsumerWidget {
         icon = Icons.person_add;
         titleText = '$actor sent you a friend request.';
         onTap = () {
-          ref.read(homeTabIndexProvider.notifier).state = 3; // Go to Friends tab
+          ref.read(homeTabIndexProvider.notifier).state = 4; // Go to Friends tab
         };
         break;
-      // FIX: Added missing case
       case ActivityType.friendAccepted: 
         icon = Icons.people;
-        titleText = 'You and $actor are now friends.';
+        titleText = (activity.actorUid == currentUserId)
+            ? 'You and $target are now friends.'
+            : 'You and $actor are now friends.';
         onTap = () {
+          final profileId = activity.actorUid == currentUserId ? activity.targetUid : activity.actorUid;
           Navigator.of(context).push(MaterialPageRoute(
-            builder: (context) => ProfileScreen(targetUid: activity.actorUid),
+            builder: (context) => ProfileScreen(targetUid: profileId),
           ));
         };
         break;

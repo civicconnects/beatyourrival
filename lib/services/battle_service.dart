@@ -1,321 +1,405 @@
 // lib/services/battle_service.dart
-// --- START COPY & PASTE HERE ---
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:rxdart/rxdart.dart'; // Make sure rxdart is in pubspec.yaml
-
 import '../models/battle_model.dart';
 import '../models/move_model.dart';
-import 'activity_service.dart';
-import 'user_service.dart';
-import 'elo_service.dart';
+import 'auth_service.dart';
 
-final battleServiceProvider = Provider((ref) {
-  return BattleService(ref);
+final battleServiceProvider = Provider<BattleService>((ref) {
+  final authService = ref.watch(authServiceProvider);
+  return BattleService(FirebaseFirestore.instance, authService);
 });
 
-// Stream for a single battle
 final battleStreamProvider = StreamProvider.family<BattleModel?, String>((ref, battleId) {
-  return ref.read(battleServiceProvider).getBattleStream(battleId);
+  return ref.watch(battleServiceProvider).streamBattle(battleId);
 });
 
-// Stream for moves of a specific battle
+final userBattlesStreamProvider = StreamProvider<List<BattleModel>>((ref) {
+  final user = ref.watch(authServiceProvider).currentUser;
+  if (user == null) return Stream.value([]);
+  return ref.watch(battleServiceProvider).streamUserBattles(user.uid);
+});
+
 final battleMovesStreamProvider = StreamProvider.family<List<MoveModel>, String>((ref, battleId) {
-  return ref.read(battleServiceProvider).getMovesStream(battleId);
+  return ref.watch(battleServiceProvider).streamBattleMoves(battleId);
 });
 
-// Stream for ALL battles the user is involved in
-final allUserBattlesStreamProvider = StreamProvider.family<List<BattleModel>, String>((ref, userId) {
-  return ref.read(battleServiceProvider).getUserBattlesStream(userId);
-});
-
-// FIX: Provider for active/pending battles (NO .stream, prevents spinning)
+// NEW PROVIDERS FOR ACTIVE AND COMPLETED BATTLES
 final userActiveBattlesStreamProvider = StreamProvider.family<List<BattleModel>, String>((ref, userId) {
-  return ref.read(battleServiceProvider).getUserBattlesStream(userId).map((battles) {
-    return battles.where((b) => b.status == BattleStatus.active || b.status == BattleStatus.pending).toList();
-  });
+  return ref.watch(battleServiceProvider).streamUserActiveBattles(userId);
 });
 
-// FIX: Provider for completed battles (NO .stream, prevents spinning)
 final userCompletedBattlesStreamProvider = StreamProvider.family<List<BattleModel>, String>((ref, userId) {
-  return ref.read(battleServiceProvider).getUserBattlesStream(userId).map((battles) {
-    return battles.where((b) => b.status == BattleStatus.completed || b.status == BattleStatus.declined || b.status == BattleStatus.rejected).toList();
-  });
+  return ref.watch(battleServiceProvider).streamUserCompletedBattles(userId);
 });
 
-// NEW: Provider for GLOBAL active battles (Spectator Mode)
 final allActiveBattlesStreamProvider = StreamProvider<List<BattleModel>>((ref) {
-  return ref.read(battleServiceProvider).getAllActiveBattlesStream();
+  return ref.watch(battleServiceProvider).streamAllActiveBattles();
 });
-
 
 class BattleService {
-  final ProviderRef _ref;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  late final CollectionReference _battleCollection;
-  late final ActivityService _activityService;
-  late final UserService _userService;
-  late final EloService _eloService;
+  final FirebaseFirestore _firestore;
+  final AuthService _authService;
 
-  BattleService(this._ref) {
-    _battleCollection = _firestore.collection('battles'); // lowercase 'b'
-    _activityService = _ref.read(activityServiceProvider);
-    _userService = _ref.read(userServiceProvider);
-    _eloService = _ref.read(eloServiceProvider);
-  }
+  BattleService(this._firestore, this._authService);
 
-  // ----------------------------------------------------
-  // Stream Getters
-  // ----------------------------------------------------
-
-  Stream<BattleModel?> getBattleStream(String battleId) {
-    return _battleCollection.doc(battleId).snapshots().map((doc) {
-      if (!doc.exists || doc.data() == null) return null;
-      return BattleModel.fromMap(doc.data()! as Map<String, dynamic>, id: doc.id); 
-    });
-  }
-
-  Stream<List<MoveModel>> getMovesStream(String battleId) {
-    return _battleCollection
-        .doc(battleId)
-        .collection('moves') 
-        .orderBy('submittedAt', descending: false) 
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => MoveModel.fromMap(doc.data()!, doc.id)) 
-            .toList())
-        .startWith(const []); // FIX: Prevents spinning on empty lists
-  }
-
-  // FIX: New method to get ALL active battles for spectators
-  Stream<List<BattleModel>> getAllActiveBattlesStream() {
-    return _battleCollection
-        .where('status', isEqualTo: BattleStatus.active.name)
-        .orderBy('createdAt', descending: true) // Show newest first
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BattleModel.fromMap(doc.data()! as Map<String, dynamic>, id: doc.id)) 
-            .toList())
-        .startWith(const []);
-  }
-
-  // This is the working, non-spinning stream logic
-  Stream<List<BattleModel>> getUserBattlesStream(String userId) {
-    final challengerStream = _battleCollection
-        .where('challengerUid', isEqualTo: userId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BattleModel.fromMap(doc.data()! as Map<String, dynamic>, id: doc.id)) 
-            .toList())
-        .startWith(const []); // FIX: Prevents spinning
-
-    final opponentStream = _battleCollection
-        .where('opponentUid', isEqualTo: userId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => BattleModel.fromMap(doc.data()! as Map<String, dynamic>, id: doc.id)) 
-            .toList())
-        .startWith(const []); // FIX: Prevents spinning
-
-    return Rx.combineLatest2(
-      challengerStream,
-      opponentStream,
-      (List<BattleModel> challengerBattles, List<BattleModel> opponentBattles) {
-        final Map<String, BattleModel> battlesMap = {};
-        for (var battle in challengerBattles) { battlesMap[battle.id!] = battle; }
-        for (var battle in opponentBattles) { battlesMap[battle.id!] = battle; }
-        
-        final allBattles = battlesMap.values.toList();
-        allBattles.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return allBattles;
-      }
-    );
-  }
-
-  Future<BattleModel?> getBattleById(String battleId) async {
-    final doc = await _battleCollection.doc(battleId).get();
-    if (!doc.exists) return null;
-    final data = doc.data() as Map<String, dynamic>;
-    data['id'] = doc.id;
-    return BattleModel.fromMap(data, id: doc.id);
-  }
-
-  // ----------------------------------------------------
-  // Actions
-  // ----------------------------------------------------
-
-  Future<void> createBattle({
+  // Create a new battle challenge
+  Future<String> createBattle({
     required String challengerUid,
     required String opponentUid,
     required String genre,
     required int maxRounds,
   }) async {
-    final newBattle = BattleModel(
-      id: '', 
+    final battleRef = _firestore.collection('battles').doc();
+    
+    final battle = BattleModel(
+      id: battleRef.id,
       challengerUid: challengerUid,
       opponentUid: opponentUid,
+      genre: genre,
       status: BattleStatus.pending,
-      createdAt: DateTime.now(),
-      moves: const [], 
       currentRound: 1,
-      currentTurnUid: challengerUid,
-      maxRounds: maxRounds, 
-      genre: genre, 
+      maxRounds: maxRounds,
+      currentTurnUid: challengerUid, // Challenger goes first
+      createdAt: DateTime.now(),
+      moves: [],
     );
 
-    final docRef = await _battleCollection.add(newBattle.toMap());
-    await _activityService.logChallengeSent(docRef.id, challengerUid, opponentUid);
+    await battleRef.set(battle.toMap());
+    return battleRef.id;
   }
 
-  Future<void> acceptChallenge(String battleId) async {
-    await _battleCollection.doc(battleId).update({
-      'status': BattleStatus.active.name,
+  // Stream a single battle
+  Stream<BattleModel?> streamBattle(String battleId) {
+    return _firestore
+        .collection('battles')
+        .doc(battleId)
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return null;
+      return BattleModel.fromMap(doc.data()!, id: doc.id);
     });
-    final battle = await getBattleById(battleId);
-    if (battle != null) {
-      await _activityService.logChallengeAccepted(battle.id!, battle.challengerUid, battle.opponentUid);
-    }
   }
 
-  Future<void> declineChallenge(String battleId) async {
-    await _battleCollection.doc(battleId).update({'status': BattleStatus.declined.name});
-    final battle = await getBattleById(battleId);
-    if (battle != null) {
-      await _activityService.logChallengeDeclined(battle.id!, battle.challengerUid, battle.opponentUid);
-    }
-  }
-
-  // FIX: Method required for "Cancel" button
-  Future<void> cancelChallenge(String battleId) async {
-    final battle = await getBattleById(battleId); 
-    if (battle == null) return;
-
-    await _battleCollection.doc(battleId).update({
-      'status': BattleStatus.rejected.name, 
+  // Stream all battles for a user
+  Stream<List<BattleModel>> streamUserBattles(String userId) {
+    return _firestore
+        .collection('battles')
+        .where(Filter.or(
+          Filter('challengerUid', isEqualTo: userId),
+          Filter('opponentUid', isEqualTo: userId),
+        ))
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => BattleModel.fromMap(doc.data(), id: doc.id))
+          .toList();
     });
-    await _activityService.logChallengeCanceled(battle.id!, battle.challengerUid, battle.opponentUid);
   }
 
-  Future<void> submitMove(BattleModel battle, MoveModel move) async {
-    final battleRef = _battleCollection.doc(battle.id);
-    final movesRef = battleRef.collection('moves');
+  // Stream active battles for a user
+  Stream<List<BattleModel>> streamUserActiveBattles(String userId) {
+    return _firestore
+        .collection('battles')
+        .where(Filter.or(
+          Filter('challengerUid', isEqualTo: userId),
+          Filter('opponentUid', isEqualTo: userId),
+        ))
+        .where('status', whereIn: ['active', 'pending'])
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => BattleModel.fromMap(doc.data(), id: doc.id))
+          .toList();
+    });
+  }
 
-    await _firestore.runTransaction((transaction) async {
-      final battleSnapshot = await transaction.get(battleRef);
-      if (!battleSnapshot.exists) throw Exception("Battle not found.");
-      final currentBattle = BattleModel.fromMap(battleSnapshot.data() as Map<String, dynamic>, id: battleSnapshot.id);
+  // Stream completed battles for a user
+  Stream<List<BattleModel>> streamUserCompletedBattles(String userId) {
+    return _firestore
+        .collection('battles')
+        .where(Filter.or(
+          Filter('challengerUid', isEqualTo: userId),
+          Filter('opponentUid', isEqualTo: userId),
+        ))
+        .where('status', isEqualTo: 'completed')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => BattleModel.fromMap(doc.data(), id: doc.id))
+          .toList();
+    });
+  }
 
-      if (currentBattle.status != BattleStatus.active) throw Exception("Battle not active.");
-      if (currentBattle.currentTurnUid != move.submittedByUid) throw Exception("Not your turn!");
+  // Stream all active battles (for search/spectating)
+  Stream<List<BattleModel>> streamAllActiveBattles() {
+    return _firestore
+        .collection('battles')
+        .where('status', isEqualTo: 'active')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => BattleModel.fromMap(doc.data(), id: doc.id))
+          .toList();
+    });
+  }
 
-      final nextTurnUid = currentBattle.currentTurnUid == currentBattle.challengerUid 
-          ? currentBattle.opponentUid 
-          : currentBattle.challengerUid;
-
-      final movesSnapshot = await movesRef.where('round', isEqualTo: currentBattle.currentRound).get();
-      final movesThisRound = movesSnapshot.docs.length + 1;
-
-      int nextRound = currentBattle.currentRound;
-      BattleStatus nextStatus = currentBattle.status;
-
-      if (movesThisRound == 2) { 
-        if (currentBattle.currentRound < currentBattle.maxRounds) {
-          nextRound = currentBattle.currentRound + 1;
-        } else {
-          nextStatus = BattleStatus.completed;
-        }
+  // Stream moves for a battle
+  Stream<List<MoveModel>> streamBattleMoves(String battleId) {
+    return _firestore
+        .collection('battles')
+        .doc(battleId)
+        .collection('moves')
+        .orderBy('submittedAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      // Explicitly type the list to avoid type inference issues
+      final List<MoveModel> moves = [];
+      for (final doc in snapshot.docs) {
+        moves.add(MoveModel.fromMap(doc.data(), doc.id));
       }
-
-      transaction.set(movesRef.doc(), move.toMap()); 
-
-      transaction.update(battleRef, {
-        'currentTurnUid': nextTurnUid,
-        'currentRound': nextRound,
-        'status': nextStatus.name,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
-    // Note: No auto-finalize call here. The user clicks "Tally Votes".
-  }
-  
-  // FIX: Updated to accept a score (1-10) and save to Map
-  Future<void> voteForMove(String battleId, String moveId, String userId, int score) async {
-    final moveRef = _battleCollection.doc(battleId).collection('moves').doc(moveId);
-
-    await _firestore.runTransaction((transaction) async {
-      final moveSnapshot = await transaction.get(moveRef);
-      if (!moveSnapshot.exists) throw Exception("Move not found!");
-      
-      final moveData = moveSnapshot.data()!;
-      final Map<String, dynamic> rawVotes = moveData['votes'] ?? {};
-      
-      // Save score: { "userId": 8 }
-      rawVotes[userId] = score;
-      
-      transaction.update(moveRef, {'votes': rawVotes});
+      return moves;
     });
   }
 
-  // FIX: Updated to calculate winner by POINTS, not vote count
-  Future<void> finalizeBattle(String battleId) async {
-    final battle = await getBattleById(battleId);
-    if (battle == null) return;
+  // Accept a battle challenge
+  Future<void> acceptChallenge(String battleId) async {
+    await _firestore.collection('battles').doc(battleId).update({
+      'status': 'active',
+      'startedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Decline a battle challenge
+  Future<void> declineChallenge(String battleId) async {
+    await _firestore.collection('battles').doc(battleId).update({
+      'status': 'declined',
+    });
+  }
+
+  // Cancel a battle challenge
+  Future<void> cancelChallenge(String battleId) async {
+    await _firestore.collection('battles').doc(battleId).update({
+      'status': 'cancelled',
+    });
+  }
+
+  // Submit a move with enhanced debug logging
+  Future<void> submitMove(BattleModel battle, MoveModel move) async {
+    debugPrint('🎯 SUBMIT MOVE CALLED - Battle ID: ${battle.id}');
+    debugPrint('📊 Current Round: ${battle.currentRound} / Max Rounds: ${battle.maxRounds}');
+    debugPrint('👤 Current Turn: ${battle.currentTurnUid}');
+    debugPrint('📝 Move submitted by: ${move.submittedByUid}');
+    debugPrint('🎵 Move title: ${move.title}');
     
-    final movesSnapshot = await _battleCollection.doc(battleId).collection('moves').get();
-    final allMoves = movesSnapshot.docs.map((doc) => MoveModel.fromMap(doc.data()!, doc.id)).toList();
+    final battleDocRef = _firestore.collection('battles').doc(battle.id!);
+    
+    // Add the move to the moves subcollection
+    await battleDocRef.collection('moves').add(move.toMap());
+    debugPrint('✅ Move added to database');
+    
+    // Determine the next turn
+    final nextTurnUid = (battle.currentTurnUid == battle.challengerUid)
+        ? battle.opponentUid
+        : battle.challengerUid;
+    
+    debugPrint('🔄 Next turn will be: $nextTurnUid');
+    debugPrint('   - Challenger: ${battle.challengerUid}');
+    debugPrint('   - Opponent: ${battle.opponentUid}');
+    
+    // Check if we need to advance the round
+    final movesSnapshot = await battleDocRef
+        .collection('moves')
+        .where('round', isEqualTo: battle.currentRound)
+        .get();
+    
+    final movesThisRound = movesSnapshot.docs.length;
+    debugPrint('📊 Moves submitted this round: $movesThisRound');
+    
+    // List all moves for debugging
+    for (var moveDoc in movesSnapshot.docs) {
+      final moveData = moveDoc.data();
+      debugPrint('   - Move by ${moveData['submittedByUid']}: ${moveData['title']}');
+    }
+    
+    Map<String, dynamic> updates = {
+      'currentTurnUid': nextTurnUid,
+      'lastActivity': FieldValue.serverTimestamp(),
+    };
+    
+    // If both players have submitted moves for this round
+    if (movesThisRound >= 2) {
+      debugPrint('🎉 Both players have submitted for round ${battle.currentRound}');
+      
+      if (battle.currentRound < battle.maxRounds) {
+        // Advance to the next round
+        updates['currentRound'] = battle.currentRound + 1;
+        debugPrint('➡️ Advancing to round ${battle.currentRound + 1}');
+        debugPrint('   Still ${battle.maxRounds - battle.currentRound} rounds remaining');
+      } else {
+        // Battle is complete, move to voting phase
+        updates['status'] = 'completed';
+        debugPrint('🏁 Battle complete! All ${battle.maxRounds} rounds finished');
+        debugPrint('📊 Moving to voting phase');
+      }
+    } else {
+      debugPrint('⏳ Waiting for other player to submit their move');
+      debugPrint('   Need ${2 - movesThisRound} more move(s) for this round');
+    }
+    
+    // Update the battle document
+    debugPrint('📝 Updating battle document with:');
+    updates.forEach((key, value) {
+      debugPrint('   - $key: $value');
+    });
+    
+    await battleDocRef.update(updates);
+    debugPrint('✅ Battle document updated successfully');
+    debugPrint('🎯 SUBMIT MOVE COMPLETED\n');
+  }
 
+  // Vote for a move
+  Future<void> voteForMove(String battleId, String moveId, String voterId, int score) async {
+    final moveRef = _firestore
+        .collection('battles')
+        .doc(battleId)
+        .collection('moves')
+        .doc(moveId);
+    
+    await moveRef.update({
+      'votes.$voterId': score,
+    });
+  }
+
+  // Finalize battle and calculate winner
+  Future<void> finalizeBattle(String battleId) async {
+    debugPrint('🏆 FINALIZING BATTLE: $battleId');
+    
+    final battleDoc = await _firestore.collection('battles').doc(battleId).get();
+    final battle = BattleModel.fromMap(battleDoc.data()!, id: battleId);
+    
+    // Get all moves for this battle
+    final movesSnapshot = await _firestore
+        .collection('battles')
+        .doc(battleId)
+        .collection('moves')
+        .get();
+    
+    // Calculate scores for each player
     int challengerScore = 0;
     int opponentScore = 0;
-
-    for (final move in allMoves) {
+    
+    for (var moveDoc in movesSnapshot.docs) {
+      final move = MoveModel.fromMap(moveDoc.data(), moveDoc.id);
+      final totalVotes = move.totalScore;
+      
       if (move.submittedByUid == battle.challengerUid) {
-        challengerScore += move.totalScore; // Uses new totalScore property
+        challengerScore += totalVotes;
+        debugPrint('   Challenger move: ${move.title} - Score: $totalVotes');
       } else if (move.submittedByUid == battle.opponentUid) {
-        opponentScore += move.totalScore; 
+        opponentScore += totalVotes;
+        debugPrint('   Opponent move: ${move.title} - Score: $totalVotes');
       }
     }
     
-    String winnerUid;
-    double scoreForChallengerElo;
-    bool isDraw;
-
+    debugPrint('📊 Final Scores:');
+    debugPrint('   - Challenger: $challengerScore');
+    debugPrint('   - Opponent: $opponentScore');
+    
+    // Determine winner
+    String? winnerUid;
     if (challengerScore > opponentScore) {
       winnerUid = battle.challengerUid;
-      scoreForChallengerElo = 1.0;
-      isDraw = false;
+      debugPrint('🎉 Winner: Challenger (${battle.challengerUid})');
     } else if (opponentScore > challengerScore) {
       winnerUid = battle.opponentUid;
-      scoreForChallengerElo = 0.0;
-      isDraw = false;
+      debugPrint('🎉 Winner: Opponent (${battle.opponentUid})');
     } else {
       winnerUid = 'Draw';
-      scoreForChallengerElo = 0.5;
-      isDraw = true;
+      debugPrint('🤝 Result: Draw!');
     }
-
-    await _eloService.processBattleResult(
-      battle.challengerUid,
-      battle.opponentUid,
-      scoreForChallengerElo,
-      isDraw,
-    );
-
-    await _battleCollection.doc(battleId).update({
+    
+    // Update battle with final results
+    await _firestore.collection('battles').doc(battleId).update({
+      'status': 'completed',
       'winnerUid': winnerUid,
       'challengerFinalScore': challengerScore,
       'opponentFinalScore': opponentScore,
-      'completedTimestamp': FieldValue.serverTimestamp(),
+      'completedAt': FieldValue.serverTimestamp(),
     });
     
-    await _activityService.logBattleCompleted(
-      battleId, 
-      battle.challengerUid, 
-      battle.opponentUid, 
-      winnerUid,
-      challengerScore: challengerScore,
-      opponentScore: opponentScore,
-    );
+    debugPrint('✅ Battle finalized successfully\n');
+  }
+
+  // Get battle statistics for a user
+  Future<Map<String, int>> getUserBattleStats(String userId) async {
+    final battlesSnapshot = await _firestore
+        .collection('battles')
+        .where(Filter.or(
+          Filter('challengerUid', isEqualTo: userId),
+          Filter('opponentUid', isEqualTo: userId),
+        ))
+        .where('status', isEqualTo: 'completed')
+        .get();
+    
+    int wins = 0;
+    int losses = 0;
+    int draws = 0;
+    
+    for (var doc in battlesSnapshot.docs) {
+      final battle = BattleModel.fromMap(doc.data(), id: doc.id);
+      if (battle.winnerUid == userId) {
+        wins++;
+      } else if (battle.winnerUid == 'Draw') {
+        draws++;
+      } else if (battle.winnerUid != null) {
+        losses++;
+      }
+    }
+    
+    return {
+      'wins': wins,
+      'losses': losses,
+      'draws': draws,
+      'total': battlesSnapshot.docs.length,
+    };
+  }
+
+  // Get active battles count
+  Future<int> getActiveBattlesCount(String userId) async {
+    final snapshot = await _firestore
+        .collection('battles')
+        .where(Filter.or(
+          Filter('challengerUid', isEqualTo: userId),
+          Filter('opponentUid', isEqualTo: userId),
+        ))
+        .where('status', isEqualTo: 'active')
+        .get();
+    
+    return snapshot.docs.length;
+  }
+
+  // Check if users have an active battle
+  Future<bool> hasActiveBattle(String userId1, String userId2) async {
+    final snapshot = await _firestore
+        .collection('battles')
+        .where('status', isEqualTo: 'active')
+        .get();
+    
+    for (var doc in snapshot.docs) {
+      final battle = BattleModel.fromMap(doc.data(), id: doc.id);
+      if ((battle.challengerUid == userId1 && battle.opponentUid == userId2) ||
+          (battle.challengerUid == userId2 && battle.opponentUid == userId1)) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 }
-// --- END COPY & PASTE HERE ---

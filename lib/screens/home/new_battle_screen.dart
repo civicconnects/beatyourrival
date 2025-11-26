@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
 import '../../services/auth_service.dart';
-import '../../services/battle_service.dart'; // REQUIRED: Import BattleService
+import '../../services/battle_service.dart.old'; // REQUIRED: Import BattleService
 
 // ----------------------------------------------------------------------
 // 1. Riverpod Provider: Search Results

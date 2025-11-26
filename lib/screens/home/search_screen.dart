@@ -149,7 +149,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
                 children: [
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(labelText: 'Select Genre'),
-                    value: _selectedGenre,
+                    initialValue: _selectedGenre,
                     items: ['Hip Hop', 'Pop', 'Rock', 'R&B', 'Electronic', 'Country', 'Reggae']
                         .map((genre) => DropdownMenuItem(value: genre, child: Text(genre)))
                         .toList(),
@@ -158,7 +158,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
                     decoration: const InputDecoration(labelText: 'Number of Rounds'),
-                    value: _selectedRounds,
+                    initialValue: _selectedRounds,
                     // FIX: Ensure '1' is in the list
                     items: [1, 3, 5, 7, 9]
                         .map((rounds) => DropdownMenuItem(value: rounds, child: Text('$rounds Rounds')))

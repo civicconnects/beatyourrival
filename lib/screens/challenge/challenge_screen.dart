@@ -77,7 +77,7 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen> {
                 children: [
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(labelText: 'Select Genre'),
-                    value: _selectedGenre,
+                    initialValue: _selectedGenre,
                     items: ['Hip Hop', 'Pop', 'Rock', 'R&B', 'Electronic', 'Country', 'Jazz', 'Classical', 'Reggae', 'Latin', 'Blues', 'Metal', 'Folk', 'Soul', 'Punk', 'Disco', 'House', 'Techno', 'Dubstep', 'Trap', 'Funk', 'Gospel', 'Indie', 'Alternative', 'K-Pop', 'J-Pop', 'Reggaeton', 'Ska', 'Grunge', 'Emo']
                         .map((genre) => DropdownMenuItem(value: genre, child: Text(genre)))
                         .toList(),
@@ -87,7 +87,7 @@ class _ChallengeScreenState extends ConsumerState<ChallengeScreen> {
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
                     decoration: const InputDecoration(labelText: 'Number of Rounds'),
-                    value: _selectedRounds,
+                    initialValue: _selectedRounds,
                     // FIX: Explicitly added 1 to this list
                     items: [1, 3, 5, 7, 9]
                         .map((rounds) => DropdownMenuItem(value: rounds, child: Text('$rounds Rounds')))

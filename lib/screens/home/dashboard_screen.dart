@@ -5,11 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/auth_service.dart';
-import '../../services/battle_service.dart'; 
+import '../../services/battle_service.dart'; // FIX: This import was missing/broken
 import '../battle/battle_detail_screen.dart';
 import '../../models/battle_model.dart'; 
-import '../../providers/navigation_provider.dart';
-import '../../services/user_service.dart'; // We need this to get opponent's name
+import '../../services/user_service.dart'; 
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -22,6 +21,7 @@ class DashboardScreen extends ConsumerWidget {
       return const Center(child: Text('Please log in.'));
     }
 
+    // This provider comes from battle_service.dart
     final completedBattlesAsync = ref.watch(userCompletedBattlesStreamProvider(currentUid));
 
     return Scaffold(
@@ -43,31 +43,47 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Expanded(
               child: completedBattlesAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (err, stack) => Center(child: Text('Error loading battles: $err')),
                 data: (battles) {
                   if (battles.isEmpty) {
-                    return const Center(child: Text('No completed battles yet!'));
+                     // Wrap in RefreshIndicator so you can pull-to-refresh even if empty
+                     return RefreshIndicator(
+                       onRefresh: () async {
+                         return ref.refresh(userCompletedBattlesStreamProvider(currentUid).future);
+                       },
+                       child: ListView(
+                         physics: const AlwaysScrollableScrollPhysics(),
+                         children: const [
+                           SizedBox(height: 200),
+                           Center(child: Text('No completed battles yet!')),
+                         ],
+                       ),
+                     );
                   }
 
-                  return ListView.builder(
-                    itemCount: battles.length,
-                    itemBuilder: (context, index) {
-                      final battle = battles[index];
-                      // We need to find out who the opponent was
-                      final opponentId = battle.challengerUid == currentUid 
-                          ? battle.opponentUid 
-                          : battle.challengerUid;
-                      
-                      // Use the new _CompletedBattleTile to show the score
-                      return _CompletedBattleTile(
-                        battle: battle, 
-                        opponentId: opponentId, 
-                        currentUserId: currentUid
-                      );
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      return ref.refresh(userCompletedBattlesStreamProvider(currentUid).future);
                     },
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: battles.length,
+                      itemBuilder: (context, index) {
+                        final battle = battles[index];
+                        final opponentId = battle.challengerUid == currentUid 
+                            ? battle.opponentUid 
+                            : battle.challengerUid;
+                        
+                        return _CompletedBattleTile(
+                          battle: battle, 
+                          opponentId: opponentId, 
+                          currentUserId: currentUid
+                        );
+                      },
+                    ),
                   );
                 },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, stack) => Center(child: Text('Error loading battles: $err')),
               ),
             ),
           ],
@@ -77,8 +93,7 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-// --- NEW HELPER WIDGET ---
-// This widget fetches the opponent's name and displays the final score
+// --- HELPER WIDGET ---
 class _CompletedBattleTile extends ConsumerWidget {
   final BattleModel battle;
   final String opponentId;
@@ -92,7 +107,6 @@ class _CompletedBattleTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Get the opponent's profile to show their name
     final opponentProfileAsync = ref.watch(userProfileFutureProvider(opponentId));
 
     return opponentProfileAsync.when(
@@ -101,9 +115,8 @@ class _CompletedBattleTile extends ConsumerWidget {
       data: (opponent) {
         final opponentUsername = opponent?.username ?? 'Unknown Rival';
         
-        // --- FIX: This is the corrected display logic ---
         final bool isWinner = battle.winnerUid == currentUserId;
-        final bool isDraw = battle.winnerUid == 'Draw'; // Check for "Draw" string
+        final bool isDraw = battle.winnerUid == 'Draw';
 
         final int myScore = (battle.challengerUid == currentUserId)
             ? (battle.challengerFinalScore ?? 0)
@@ -126,7 +139,6 @@ class _CompletedBattleTile extends ConsumerWidget {
           resultText = 'LOSS';
           resultColor = Colors.red;
         }
-        // --- END FIX ---
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 6.0),

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/battle_model.dart';
-import '../../models/user_model.dart'; 
 import '../../services/auth_service.dart';
 import '../../services/battle_service.dart'; 
 import '../../services/user_service.dart'; 
@@ -44,12 +43,13 @@ class BattlesScreen extends ConsumerWidget {
           if (battles.isEmpty) {
             return RefreshIndicator(
               onRefresh: () async {
-                return ref.refresh(userActiveBattlesStreamProvider(currentUserId));
+                // Forces the provider to reload data from Firestore
+                return ref.refresh(userActiveBattlesStreamProvider(currentUserId).future);
               },
               child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(), // Ensures you can pull even if list is empty
                 children: const [
-                  SizedBox(height: 300),
+                  SizedBox(height: 300), // Push text down
                   Center(child: Text('You have no active or pending battles. Challenge someone!')),
                 ],
               ),
@@ -59,7 +59,7 @@ class BattlesScreen extends ConsumerWidget {
           // FIX: Wrap list in RefreshIndicator
           return RefreshIndicator(
             onRefresh: () async {
-              return ref.refresh(userActiveBattlesStreamProvider(currentUserId));
+              return ref.refresh(userActiveBattlesStreamProvider(currentUserId).future);
             },
             child: ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -89,15 +89,15 @@ class BattlesScreen extends ConsumerWidget {
             MaterialPageRoute(builder: (context) => const ChallengeScreen()),
           );
         },
-        child: const Icon(Icons.send),
         tooltip: 'Challenge New Opponent',
+        child: const Icon(Icons.send),
       ),
     );
   }
 }
 
 
-// --- HELPER WIDGET ---
+// --- HELPER WIDGET (UNMODIFIED LOGIC) ---
 class _BattleListTile extends ConsumerWidget {
   final BattleModel battle;
   final String opponentId;

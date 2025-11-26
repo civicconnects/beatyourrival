@@ -18,6 +18,7 @@ class ActivityModel {
   final String id;
   final ActivityType type;
   final DateTime timestamp;
+  // List of UIDs involved (e.g., [challenger, opponent])
   final List<String> participants; 
   final String actorUid; // The user who *performed* the action
   final String? targetUid; // The user who *received* the action (optional)
@@ -29,8 +30,8 @@ class ActivityModel {
     required this.id,
     required this.type,
     required this.timestamp,
-    required this.participants, // This field is required
-    required this.actorUid,   // This field is required
+    required this.participants,
+    required this.actorUid,
     this.targetUid,
     this.battleId,
     this.challengerScore,
@@ -55,7 +56,7 @@ class ActivityModel {
       id: id,
       type: ActivityType.values.firstWhere(
         (e) => e.name == map['type'],
-        orElse: () => ActivityType.challengeSent, // Default fallback
+        orElse: () => ActivityType.challengeSent,
       ),
       timestamp: (map['timestamp'] as Timestamp).toDate(),
       participants: List<String>.from(map['participants'] ?? []),

@@ -6,35 +6,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/activity_model.dart';
 import 'auth_service.dart';
 
-// --- SERVICE PROVIDER ---
 final activityServiceProvider = Provider((ref) {
   return ActivityService(ref);
 });
 
-// --- STREAM PROVIDER ---
-// Fetches all activities where the current user is a participant
 final activityFeedStreamProvider = StreamProvider<List<ActivityModel>>((ref) {
   final currentUid = ref.watch(authStateChangesProvider).value?.uid;
   if (currentUid == null) {
-    return Stream.value([]); // Return empty stream if not logged in
+    return Stream.value([]); 
   }
   return ref.read(activityServiceProvider).getActivityFeedStream(currentUid);
 });
 
-
 class ActivityService {
-  final ProviderRef _ref;
+  // FIX: Changed 'ProviderRef' to 'Ref' to fix the crash
+  final Ref _ref;
   final CollectionReference _activityCollection = FirebaseFirestore.instance.collection('activity');
 
   ActivityService(this._ref);
 
-  // --- NEW READ METHOD ---
   Stream<List<ActivityModel>> getActivityFeedStream(String userId) {
-    // Get all activities where the 'participants' list contains the current user's ID
     return _activityCollection
         .where('participants', arrayContains: userId)
         .orderBy('timestamp', descending: true)
-        .limit(30) // Get the last 30 activities
+        .limit(30)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -43,14 +38,12 @@ class ActivityService {
         });
   }
 
-  // --- UPDATED WRITE METHODS ---
-
   Future<void> logChallengeSent(String battleId, String challengerUid, String opponentUid) async {
     final activity = ActivityModel(
-      id: '', // Firestore will generate
+      id: '', 
       type: ActivityType.challengeSent,
       timestamp: DateTime.now(),
-      participants: [challengerUid, opponentUid], // So both users see it
+      participants: [challengerUid, opponentUid], 
       actorUid: challengerUid,
       targetUid: opponentUid,
       battleId: battleId,
@@ -64,7 +57,7 @@ class ActivityService {
       type: ActivityType.challengeAccepted,
       timestamp: DateTime.now(),
       participants: [challengerUid, opponentUid],
-      actorUid: opponentUid, // The opponent is the one who accepted
+      actorUid: opponentUid, 
       targetUid: challengerUid,
       battleId: battleId,
     );
@@ -77,21 +70,20 @@ class ActivityService {
       type: ActivityType.challengeDeclined,
       timestamp: DateTime.now(),
       participants: [challengerUid, opponentUid],
-      actorUid: opponentUid, // The opponent is the one who declined
+      actorUid: opponentUid, 
       targetUid: challengerUid,
       battleId: battleId,
     );
     await _activityCollection.add(activity.toMap());
   }
   
-  // --- NEW LOGGING METHOD ---
   Future<void> logChallengeCanceled(String battleId, String challengerUid, String opponentUid) async {
     final activity = ActivityModel(
       id: '',
-      type: ActivityType.challengeCanceled, // Use the new type
+      type: ActivityType.challengeCanceled, 
       timestamp: DateTime.now(),
       participants: [challengerUid, opponentUid],
-      actorUid: challengerUid, // The challenger is the one who canceled
+      actorUid: challengerUid, 
       targetUid: opponentUid,
       battleId: battleId,
     );
@@ -104,8 +96,8 @@ class ActivityService {
       type: ActivityType.battleCompleted,
       timestamp: DateTime.now(),
       participants: [challengerUid, opponentUid],
-      actorUid: winnerUid, // The winner (or "Draw")
-      targetUid: winnerUid == challengerUid ? opponentUid : challengerUid, // The loser
+      actorUid: winnerUid, 
+      targetUid: winnerUid == challengerUid ? opponentUid : challengerUid, 
       battleId: battleId,
       challengerScore: challengerScore,
       opponentScore: opponentScore,
@@ -113,6 +105,28 @@ class ActivityService {
     await _activityCollection.add(activity.toMap());
   }
   
-  // You can add logFriendRequest and logFriendAccepted here later
+  Future<void> logFriendRequest(String senderUid, String receiverUid) async {
+    final activity = ActivityModel(
+      id: '',
+      type: ActivityType.friendRequest,
+      timestamp: DateTime.now(),
+      participants: [senderUid, receiverUid],
+      actorUid: senderUid,
+      targetUid: receiverUid,
+    );
+    await _activityCollection.add(activity.toMap());
+  }
+  
+  Future<void> logFriendAccepted(String accepterUid, String requestorUid) async {
+    final activity = ActivityModel(
+      id: '',
+      type: ActivityType.friendAccepted,
+      timestamp: DateTime.now(),
+      participants: [accepterUid, requestorUid], 
+      actorUid: accepterUid,
+      targetUid: requestorUid,
+    );
+    await _activityCollection.add(activity.toMap());
+  }
 }
 // --- END COPY & PASTE HERE ---

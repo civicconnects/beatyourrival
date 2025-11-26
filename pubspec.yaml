@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.3.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -12,32 +12,36 @@ dependencies:
   
   # --- CORE PACKAGES ---
   flutter_riverpod: ^2.5.1
-  firebase_core: ^2.31.0
-  firebase_auth: ^4.19.4
-  cloud_firestore: ^4.17.2
-  firebase_storage: ^11.7.4
-  firebase_messaging: ^14.9.1
+  firebase_core: ^3.1.0
+  firebase_auth: ^5.1.0
+  cloud_firestore: ^5.0.1
+  firebase_storage: ^12.0.0
+  firebase_messaging: ^15.0.1
   
   # Utility
   rxdart: ^0.27.7 
   async: ^2.11.0       
   timeago: ^3.6.1 
   cupertino_icons: ^1.0.6 
-  share_plus: ^9.0.0
-  image_picker: ^1.2.0
+  
+  # Web Standard
+  share_plus: ^10.0.0
+  
+  image_picker: ^1.1.1
   uuid: ^4.4.0
 
   # Other Features
   flutter_stripe: ^10.1.1
   
-  # FIX: Use the raw engine instead of the UI kit
-  agora_rtc_engine: ^6.5.3
-  permission_handler: ^11.3.0
+  # LiveKit + Token Generator
+  livekit_client: ^2.5.3
+  permission_handler: ^11.3.1
+  dart_jsonwebtoken: ^2.14.0 # FIX: Added to generate tokens
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.2 
+  flutter_lints: ^4.0.0 
 
 flutter:
   uses-material-design: true

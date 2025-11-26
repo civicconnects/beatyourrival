@@ -124,7 +124,7 @@ class ProfileScreen extends ConsumerWidget {
                   onChanged: (bool isReady) {
                     ref.read(userServiceProvider).updateUserReadyStatus(targetUser.uid, isReady);
                   },
-                  activeColor: Colors.green,
+                  activeThumbColor: Colors.green,
                   secondary: Icon(targetUser.isReadyToBattle ? Icons.shield : Icons.shield_outlined),
                 ),
                 SwitchListTile(
@@ -134,7 +134,7 @@ class ProfileScreen extends ConsumerWidget {
                   onChanged: (bool isPublic) {
                     ref.read(userServiceProvider).updateUserStatsVisibility(targetUser.uid, isPublic);
                   },
-                  activeColor: Colors.blue,
+                  activeThumbColor: Colors.blue,
                   secondary: Icon(targetUser.isStatsPublic ? Icons.visibility : Icons.visibility_off),
                 ),
                 SwitchListTile(
@@ -144,7 +144,7 @@ class ProfileScreen extends ConsumerWidget {
                   onChanged: (bool isSilent) {
                     ref.read(userServiceProvider).updateUserSilentMode(targetUser.uid, isSilent);
                   },
-                  activeColor: Colors.orange,
+                  activeThumbColor: Colors.orange,
                   secondary: Icon(targetUser.isSilentMode ? Icons.notifications_off : Icons.notifications_active),
                 ),
                 const Divider(height: 32),
@@ -188,7 +188,7 @@ class ProfileScreen extends ConsumerWidget {
             final shouldRemove = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
-                title: Text('Remove Friend?'),
+                title: const Text('Remove Friend?'),
                 content: Text('Are you sure you want to remove ${targetUser.username} as a friend?'),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),

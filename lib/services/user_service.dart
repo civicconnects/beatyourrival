@@ -58,7 +58,7 @@ class UserService {
   Stream<List<UserModel>> searchUsersByUsername(String query) {
     if (query.isEmpty) return Stream.value([]);
     
-    final endQuery = query + '\uf8ff'; 
+    final endQuery = '$query\uf8ff'; 
     return _firestore.collection(_collection)
         .orderBy('username')
         .where('username', isGreaterThanOrEqualTo: query)

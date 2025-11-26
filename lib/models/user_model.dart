@@ -61,7 +61,7 @@ class UserModel {
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) { 
-    List<String> _castList(dynamic list) {
+    List<String> castList(dynamic list) {
       if (list == null) return [];
       return (list as List<dynamic>).map((item) => item as String).toList();
     }
@@ -80,8 +80,8 @@ class UserModel {
       isReadyToBattle: map['isReadyToBattle'] as bool? ?? false,
       isStatsPublic: map['isStatsPublic'] as bool? ?? true,
       isSilentMode: map['isSilentMode'] as bool? ?? false, // Add to factory
-      friends: _castList(map['friends']), 
-      friendRequests: _castList(map['friendRequests']), 
+      friends: castList(map['friends']), 
+      friendRequests: castList(map['friendRequests']), 
     );
   }
 }

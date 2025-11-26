@@ -3,7 +3,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/friend_service.dart';
 import 'profile_screen.dart'; // To tap on a friend's profile
