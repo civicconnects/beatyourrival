@@ -1,5 +1,3 @@
-// lib/models/move_model.dart
-// --- START COPY & PASTE HERE ---
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MoveModel {
@@ -9,10 +7,7 @@ class MoveModel {
   final String submittedByUid;
   final int round;
   final DateTime submittedAt;
-  
-  // FIX: Changed from List<String> to Map<String, int>
-  // Key = UserID, Value = Score (1-10)
-  final Map<String, int> votes; 
+  final Map<String, int> votes; // Key = UserID, Value = Score (1-10)
 
   MoveModel({
     required this.id,
@@ -21,7 +16,7 @@ class MoveModel {
     required this.submittedByUid,
     required this.round,
     required this.submittedAt,
-    this.votes = const {}, // Default to empty map
+    this.votes = const {},
   });
 
   Map<String, dynamic> toMap() {
@@ -42,7 +37,6 @@ class MoveModel {
       return DateTime.now(); 
     }
     
-    // FIX: Safe parsing for the votes Map
     Map<String, int> parsedVotes = {};
     if (map['votes'] != null) {
       Map<String, dynamic> rawVotes = map['votes'] as Map<String, dynamic>;
@@ -62,10 +56,8 @@ class MoveModel {
     );
   }
   
-  // Helper to get total score
   int get totalScore {
     if (votes.isEmpty) return 0;
     return votes.values.reduce((a, b) => a + b);
   }
 }
-// --- END COPY & PASTE HERE ---

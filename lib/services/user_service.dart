@@ -3,6 +3,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Needed for User type
 import '../models/user_model.dart'; 
 import 'auth_service.dart';
 
@@ -31,6 +32,21 @@ final currentUserProfileStreamProvider = StreamProvider<UserModel?>((ref) {
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'Users'; 
+
+  // NEW METHOD: Creates the model and saves it
+  Future<void> initializeNewUserProfile(User firebaseUser, String username, String email) async {
+    final newUser = UserModel(
+      uid: firebaseUser.uid,
+      username: username,
+      email: email, // Email is now mandatory
+      eloScore: 1000,
+      totalBattles: 0,
+      wins: 0,
+      losses: 0,
+      createdAt: DateTime.now(),
+    );
+    await createUserProfile(newUser);
+  }
 
   Future<void> createUserProfile(UserModel user) async {
     await _firestore.collection(_collection).doc(user.uid).set(user.toMap());
@@ -126,8 +142,7 @@ class UserService {
       'isStatsPublic': isPublic,
     });
   }
-
-  // --- NEW: Update silent mode ---
+  
   Future<void> updateUserSilentMode(String uid, bool isSilent) async {
     await _firestore.collection(_collection).doc(uid).update({
       'isSilentMode': isSilent,

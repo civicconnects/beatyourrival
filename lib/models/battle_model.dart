@@ -1,5 +1,3 @@
-// lib/models/battle_model.dart
-// --- START COPY & PASTE HERE ---
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'move_model.dart'; 
 
@@ -15,14 +13,12 @@ class BattleModel {
   final String currentTurnUid;
   final BattleStatus status;
   final String? winnerUid; 
-  
-  // FIX: Added final score fields
   final int? challengerFinalScore;
   final int? opponentFinalScore;
-  
   final DateTime createdAt;
   final DateTime? completedTimestamp;
-  final List<MoveModel> moves; 
+  final List<MoveModel> moves;
+  final Map<String, int> movesCount; // NEW: Track moves per round
 
   BattleModel({
     this.id,
@@ -34,11 +30,12 @@ class BattleModel {
     required this.currentTurnUid,
     required this.status,
     required this.createdAt, 
-    required this.moves,     
+    required this.moves,
     this.winnerUid,
-    this.challengerFinalScore, // FIX: Added to constructor
-    this.opponentFinalScore, // FIX: Added to constructor
+    this.challengerFinalScore,
+    this.opponentFinalScore,
     this.completedTimestamp,
+    this.movesCount = const {},
   });
 
   factory BattleModel.fromMap(Map<String, dynamic> map, {String? id}) {
@@ -56,6 +53,20 @@ class BattleModel {
       return DateTime.now(); 
     }
 
+    // Extract movesCount safely
+    Map<String, int> parseMovesCount(dynamic data) {
+      if (data == null) return {};
+      if (data is! Map) return {};
+      
+      final Map<String, int> result = {};
+      (data as Map).forEach((key, value) {
+        if (key is String && value is int) {
+          result[key] = value;
+        }
+      });
+      return result;
+    }
+
     return BattleModel(
       id: id,
       challengerUid: map['challengerUid'] as String? ?? 'unknown',
@@ -66,12 +77,12 @@ class BattleModel {
       currentTurnUid: map['currentTurnUid'] as String? ?? '',
       status: parseStatus(map['status'] as String?),
       winnerUid: map['winnerUid'] as String?,
-      // FIX: Added fromMap logic
       challengerFinalScore: map['challengerFinalScore'] as int?,
       opponentFinalScore: map['opponentFinalScore'] as int?,
       createdAt: parseDate(map['createdAt']),
       completedTimestamp: map['completedTimestamp'] != null ? parseDate(map['completedTimestamp']) : null,
       moves: const [], 
+      movesCount: parseMovesCount(map['movesCount']),
     );
   }
 
@@ -85,12 +96,11 @@ class BattleModel {
       'currentTurnUid': currentTurnUid,
       'status': status.name,
       'winnerUid': winnerUid,
-      // FIX: Added toMap logic
       'challengerFinalScore': challengerFinalScore,
       'opponentFinalScore': opponentFinalScore,
       'createdAt': createdAt,
       'completedTimestamp': completedTimestamp,
+      'movesCount': movesCount,
     };
   }
 }
-// --- END COPY & PASTE HERE ---

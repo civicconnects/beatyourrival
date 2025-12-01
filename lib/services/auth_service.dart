@@ -1,61 +1,69 @@
 // lib/services/auth_service.dart
 // --- START COPY & PASTE HERE ---
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/user_model.dart'; 
-import 'user_service.dart'; 
+import 'user_service.dart';
 
-final authServiceProvider = Provider<AuthService>((ref) => AuthService(ref));
+final authServiceProvider = Provider((ref) => AuthService(ref.read(userServiceProvider)));
 
 final authStateChangesProvider = StreamProvider<User?>((ref) {
-  return ref.read(authServiceProvider).authStateChanges;
+  return FirebaseAuth.instance.authStateChanges();
 });
 
 class AuthService {
-  final Ref _ref;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  final UserService _userService;
 
-  AuthService(this._ref);
+  AuthService(this._userService);
 
-  User? get currentUser => _auth.currentUser;
+  Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-  // FIX: Renamed to match login_screen
-  Future<void> signInWithEmail(String email, String password) async { 
-    await _auth.signInWithEmailAndPassword(email: email, password: password);
+  Future<void> signInWithEmail(String email, String password) async {
+    try {
+      await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      throw Exception(e.message ?? 'Sign-in failed');
+    }
   }
 
-  // FIX: Renamed to match register_screen
-  Future<void> signUpWithEmail(String username, String email, String password) async { 
-    final userCredential = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-
-    if (userCredential.user != null) {
-      final user = userCredential.user!;
-      
-      // FIX: Construct a UserModel object
-      final newUserProfile = UserModel(
-        uid: user.uid,
-        username: username,
-        email: email, 
-        eloScore: 1000, 
-        totalBattles: 0,
-        wins: 0,
-        losses: 0,
-        profileImageUrl: null,
-        createdAt: DateTime.now(),
+  Future<void> signUpWithEmail(String email, String password, String username) async {
+    try {
+      final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      // FIX: Call createUserProfile with the single object
-      await _ref.read(userServiceProvider).createUserProfile(newUserProfile);
+      // FIX: Calls the new initialization method
+      await _userService.initializeNewUserProfile(userCredential.user!, username, email);
+      
+      // FIX: Send email verification immediately after creation
+      await sendEmailVerification();
+
+    } on FirebaseAuthException catch (e) {
+      // Clean up user if creation failed halfway (though Firebase usually prevents this)
+      if (_firebaseAuth.currentUser != null) {
+        await _firebaseAuth.currentUser!.delete(); 
+      }
+      throw Exception(e.message ?? 'Registration failed');
+    }
+  }
+
+  // NEW METHOD: Handles sending the verification link
+  Future<void> sendEmailVerification() async {
+    final user = _firebaseAuth.currentUser;
+    if (user != null && !user.emailVerified) {
+      await user.sendEmailVerification();
     }
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    await _firebaseAuth.signOut();
   }
+
+  User? get currentUser => _firebaseAuth.currentUser;
 }
 // --- END COPY & PASTE HERE ---

@@ -1,8 +1,11 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // 👇 ADD THIS LINE for Firebase
-    id("com.google.gms.google-services") version "4.4.0" apply false // Use latest version
+    
+    // FIX 1: Apply Google Services plugin without version here.
+    // The version (4.4.0) is correctly defined in the root build.gradle file.
+    id("com.google.gms.google-services") 
+    
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -18,14 +21,12 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        // FIX 2: Ensure jvmTarget is compatible with your Flutter SDK
+        jvmTarget = JavaVersion.VERSION_11.toString() 
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.beatrivals_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -34,10 +35,20 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+    
+    // FIX 3: ADD DEPENDENCY BLOCK FOR NATIVE STABILITY (LiveKit/WebRTC)
+    dependencies {
+        // Ensures Kotlin runtime is available
+        implementation("org.jetbrains.kotlin:kotlin-stdlib") 
+
+        // Adds Google Play Services Base package, crucial for stability with Firebase/WebRTC 
+        implementation("com.google.android.gms:play-services-base:18.4.0") 
+
+        // Optional, but sometimes needed for specific Android Studio versions for WebRTC
+        // implementation("org.webrtc:google-webrtc:1.0.34000") 
     }
 }
 

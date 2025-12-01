@@ -6,19 +6,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:uuid/uuid.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
-// Your LiveKit server URL
+// Import local models and services
+import '../../models/battle_model.dart';
+import '../../models/move_model.dart';
+import '../../services/battle_service.dart';
+import '../../services/auth_service.dart'; // Keep auth service import
+
+const uuid = Uuid();
+
+// LiveKit Config - Add these constants or import from settings
 const String liveKitUrl = "wss://beatrival-3no5kwuv.livekit.cloud"; 
-
-// API Key & Secret (Used to generate token automatically)
 const String apiKey = "APIgnf66ubks29J";
 const String apiSecret = "J3NLrIxAgEMXf7aP29LRLBHPIX4qOdsmN5pbLpKYeeWB";
 
+// --- LIVEBATTLESCREEN CLASS ---
+
 class LiveBattleScreen extends ConsumerStatefulWidget {
   final String battleId;
-  final bool isHost; // true = performer, false = watcher
+  final bool isHost;
   final String? hostId;
   final String? hostUsername;
   final String? player2Id;
@@ -40,34 +51,61 @@ class LiveBattleScreen extends ConsumerStatefulWidget {
   ConsumerState<LiveBattleScreen> createState() => _LiveBattleScreenState();
 }
 
+// --- LIVEBATTLESCREEN STATE CLASS ---
+
 class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
   Room? _room;
   EventsListener<RoomEvent>? _listener;
   bool _isConnected = false;
   List<ParticipantTrack> participantTracks = [];
   
-  // Timer (only for performer)
   Timer? _battleTimer;
   int _secondsRemaining = 90; 
   bool _timerStarted = false;
   
-  // Track mic and camera state locally
   bool _isMicEnabled = true;
   bool _isCameraEnabled = true;
-  
-  // Track if move has been submitted
   bool _moveSubmitted = false;
   
-  // Connection status for better UX
   String _statusMessage = "Initializing...";
   bool _isConnecting = true;
-  int _connectionProgress = 0; // 0-100 progress indicator
+  int _connectionProgress = 0;
+  bool _permissionsGranted = false;
 
   @override
   void initState() {
     super.initState();
-    // Don't start timer here - wait for successful connection
-    _initializeConnection();
+    // Only initialize, don't start connection yet to avoid getUserMedia before user interaction
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeConnection();
+    });
+  }
+
+  // --- CORE LOGIC IMPLEMENTATION ---
+
+  String _generateToken() {
+    final user = FirebaseAuth.instance.currentUser;
+    final participantId = user?.uid ?? (widget.isHost ? "performer" : "watcher");
+    final participantName = user?.displayName ?? participantId;
+    
+    final jwt = JWT(
+      {
+        "iss": apiKey,
+        "sub": participantId,
+        "iat": DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        "exp": DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000,
+        "name": participantName,
+        "video": {
+          "room": widget.battleId,
+          "roomJoin": true,
+          "canPublish": widget.isHost,
+          "canPublishData": widget.isHost,
+          "canSubscribe": true,
+        },
+      },
+    );
+    
+    return jwt.sign(SecretKey(apiSecret), algorithm: JWTAlgorithm.HS256);
   }
 
   Future<void> _initializeConnection() async {
@@ -76,14 +114,152 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
       _connectionProgress = 10;
     });
     
-    // Small delay to show UI
     await Future.delayed(const Duration(milliseconds: 500));
-    
     await _connect();
   }
 
+  Future<void> _connect() async {
+    try {
+      setState(() {
+        _statusMessage = widget.isHost ? "🎤 Setting up stream..." : "👀 Joining as viewer...";
+        _connectionProgress = 50;
+      });
+
+      // HYBRID FIX: Simplified permission handling
+      if (widget.isHost) {
+        setState(() {
+          _statusMessage = "📸 Requesting camera and microphone permissions...";
+          _connectionProgress = 20;
+        });
+
+        // CRITICAL FIX: Use permission_handler only, no direct getUserMedia calls
+        await [Permission.microphone, Permission.camera].request();
+        
+        // Wait for browser to process permissions
+        await Future.delayed(const Duration(milliseconds: 500));
+        
+        setState(() {
+          _permissionsGranted = true;
+          _statusMessage = "✅ Permissions granted";
+          _connectionProgress = 40;
+        });
+      } else {
+        setState(() {
+          _permissionsGranted = true; // Viewer doesn't need permissions
+          _statusMessage = "Permissions not required for viewer";
+        });
+      }
+
+      final token = _generateToken();
+      _room = Room();
+      _listener = _room!.createListener();
+
+      // Set up listeners
+      _listener!
+        ..on<RoomConnectedEvent>((event) => _sortParticipants())
+        ..on<ParticipantConnectedEvent>((event) => _sortParticipants())
+        ..on<LocalTrackPublishedEvent>((event) => _sortParticipants())
+        ..on<TrackSubscribedEvent>((event) => _sortParticipants());
+
+      setState(() {
+        _statusMessage = "🌐 Connecting to server...";
+        _connectionProgress = 70;
+      });
+
+      // Platform-aware RoomOptions
+      RoomOptions roomOptions;
+      if (kIsWeb) {
+        roomOptions = const RoomOptions();
+      } else {
+        roomOptions = const RoomOptions(
+          adaptiveStream: true,
+          dynacast: true,
+        );
+      }
+
+      await _room!.connect(
+        liveKitUrl, 
+        token, 
+        roomOptions: roomOptions,
+      );
+      
+      // Enable camera/mic only for host and only after successful connection
+      if (widget.isHost && _permissionsGranted) {
+        setState(() {
+          _statusMessage = "🎬 Starting camera...";
+          _connectionProgress = 85;
+        });
+
+        try {
+          // Enable camera and mic with delay
+          await _room!.localParticipant?.setCameraEnabled(true);
+          await _room!.localParticipant?.setMicrophoneEnabled(true);
+          
+          // Wait a moment for camera to initialize
+          await Future.delayed(const Duration(seconds: 1));
+          
+          // Verify camera is actually working
+          final videoTracks = _room!.localParticipant?.videoTrackPublications;
+          if (videoTracks == null || videoTracks.isEmpty) {
+            throw Exception("Camera failed to start");
+          }
+        } catch (e) {
+          print('Camera/Mic enable error: $e');
+          
+          // Provide more helpful error message for web
+          String errorMsg = "Failed to start camera/microphone: $e";
+          if (kIsWeb && e.toString().contains('getUserMedia')) {
+            errorMsg = "Browser permission denied. Please allow camera/microphone access.";
+          }
+          
+          throw Exception(errorMsg);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _isConnected = true;
+          _isConnecting = false;
+          _isMicEnabled = widget.isHost && _permissionsGranted;
+          _isCameraEnabled = widget.isHost && _permissionsGranted;
+          _statusMessage = "✅ Connected!";
+          _connectionProgress = 100;
+        });
+        
+        // CRITICAL FIX: Only start timer AFTER camera is confirmed working
+        if (widget.isHost && !_timerStarted && _permissionsGranted) {
+          _startTimer();
+        }
+      }
+    } catch (e) {
+      print('Connection failed: $e');
+      if (mounted) {
+        setState(() {
+          _statusMessage = "❌ Connection failed: ${e.toString().split(':')[0]}";
+          _isConnecting = false;
+          _connectionProgress = 0;
+        });
+        
+        String errorMessage = e.toString();
+        if (errorMessage.contains('getUserMedia') || 
+            errorMessage.contains('Unable to get user media') ||
+            errorMessage.contains('permission denied')) {
+          errorMessage = 'Camera/microphone access denied. Please check browser permissions.';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection Failed: $errorMessage'), 
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
   void _startTimer() {
-    if (_timerStarted) return; // Prevent multiple timers
+    if (_timerStarted) return;
     
     _timerStarted = true;
     print("🚀 Timer started! 90 seconds countdown begins now.");
@@ -99,273 +275,161 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
   }
 
   void _onTimeUp() {
-    // Submit the move when time is up using _finishPerformance
     if (!_moveSubmitted && widget.isHost) {
       _finishPerformance();
     }
     
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(widget.isHost ? 'Time\'s Up!' : 'Performance Ended'),
-        content: Text(widget.isHost 
-          ? 'Your 90-second performance has ended. Your move has been submitted.'
-          : 'The performer has finished their 90-second battle.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); 
-              Navigator.of(context).pop(); 
-            },
-            child: const Text('Finish'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Generate token dynamically
-  String _generateToken() {
-    final user = FirebaseAuth.instance.currentUser;
-    final participantId = user?.uid ?? (widget.isHost ? "performer_${DateTime.now().millisecondsSinceEpoch}" : "watcher_${DateTime.now().millisecondsSinceEpoch}");
-    final participantName = user?.displayName ?? (widget.isHost ? "Performer" : "Watcher");
-    
-    // Create JWT payload - adjust permissions based on role
-    final jwt = JWT(
-      {
-        "iss": apiKey,
-        "sub": participantId,
-        "iat": DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        "exp": DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000,
-        "name": participantName,
-        "video": {
-          "room": widget.battleId,
-          "roomJoin": true,
-          "canPublish": widget.isHost, // Only performer can publish
-          "canPublishData": widget.isHost,
-          "canSubscribe": true, // Everyone can watch
-        },
-      },
-    );
-    
-    // Sign and return token
-    return jwt.sign(SecretKey(apiSecret), algorithm: JWTAlgorithm.HS256);
-  }
-
-  Future<void> _connect() async {
-    try {
-      // Step 1: Request permissions (only if performer)
-      if (widget.isHost) {
-        setState(() {
-          _statusMessage = "📸 Requesting camera access...";
-          _connectionProgress = 20;
-        });
-        
-        final cameraStatus = await Permission.camera.request();
-        final micStatus = await Permission.microphone.request();
-        
-        if (cameraStatus.isDenied || micStatus.isDenied) {
-          setState(() {
-            _statusMessage = "❌ Camera/Mic permission denied";
-            _isConnecting = false;
-          });
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Camera and microphone permissions are required to perform'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
-        
-        setState(() {
-          _statusMessage = "✅ Permissions granted";
-          _connectionProgress = 30;
-        });
-        
-        await Future.delayed(const Duration(milliseconds: 500));
-      } else {
-        setState(() {
-          _statusMessage = "👀 Joining as viewer...";
-          _connectionProgress = 30;
-        });
-      }
-
-      // Step 2: Create room
-      setState(() {
-        _statusMessage = "🏗️ Setting up battle room...";
-        _connectionProgress = 40;
-      });
-      
-      _room = Room();
-      _listener = _room!.createListener();
-
-      // Listen for participant changes
-      _listener!
-        ..on<RoomConnectedEvent>((event) {
-          print('Connected to room ${event.room.name} as ${widget.isHost ? "PERFORMER" : "WATCHER"}');
-          _sortParticipants();
-        })
-        ..on<ParticipantConnectedEvent>((event) {
-          print('Participant ${event.participant.identity} connected');
-          _sortParticipants();
-        })
-        ..on<ParticipantDisconnectedEvent>((event) {
-          print('Participant ${event.participant.identity} disconnected');
-          _sortParticipants();
-        })
-        ..on<LocalTrackPublishedEvent>((event) {
-          print('Local track published');
-          _sortParticipants();
-        })
-        ..on<TrackSubscribedEvent>((event) {
-          print('Track subscribed');
-          _sortParticipants();
-        })
-        ..on<TrackUnsubscribedEvent>((event) {
-          print('Track unsubscribed');
-          _sortParticipants();
-        });
-
-      // Step 3: Generate Token
-      setState(() {
-        _statusMessage = "🔐 Generating secure token...";
-        _connectionProgress = 50;
-      });
-      
-      final token = _generateToken();
-      print("Generated Token for ${widget.isHost ? 'PERFORMER' : 'WATCHER'}");
-
-      // Step 4: Connect to LiveKit
-      setState(() {
-        _statusMessage = "🌐 Connecting to LiveKit server...";
-        _connectionProgress = 60;
-      });
-      
-      await _room!.connect(
-        liveKitUrl,
-        token,
-        roomOptions: const RoomOptions(
-          adaptiveStream: true,
-          dynacast: true,
-          defaultVideoPublishOptions: VideoPublishOptions(
-            simulcast: true,
-            videoCodec: 'h264',
-            backupVideoCodec: BackupVideoCodec(enabled: true),
-          ),
-          defaultAudioPublishOptions: AudioPublishOptions(
-            dtx: true,
-          ),
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text(widget.isHost ? 'Time\'s Up!' : 'Performance Ended'),
+          content: Text(widget.isHost 
+            ? 'Your 90-second performance has ended. Your move has been submitted.'
+            : 'The performer has finished their 90-second battle.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); 
+                // CRITICAL FIX: Calls safe exit to signal turn flip
+                _safelyDisconnectAndPop(true); 
+              },
+              child: const Text('Finish'),
+            ),
+          ],
         ),
       );
-      
-      setState(() {
-        _statusMessage = "✅ Connected to room";
-        _connectionProgress = 70;
-      });
-      
-      // Step 5: Turn on Camera & Mic ONLY if performer
-      if (widget.isHost) {
-        setState(() {
-          _statusMessage = "📹 Starting camera...";
-          _connectionProgress = 80;
-        });
-        
-        await Future.delayed(const Duration(milliseconds: 500));
-        
-        try {
-          await _room!.localParticipant?.setCameraEnabled(true);
-          setState(() {
-            _statusMessage = "🎤 Enabling microphone...";
-            _connectionProgress = 90;
-          });
-          
-          await _room!.localParticipant?.setMicrophoneEnabled(true);
-          print("Camera and Mic enabled for performer");
-          
-          setState(() {
-            _statusMessage = "🎬 Starting performance...";
-            _connectionProgress = 95;
-          });
-          
-        } catch (cameraError) {
-          print("Camera/Mic error: $cameraError");
-          setState(() {
-            _statusMessage = "⚠️ Camera warming up...";
-          });
-          // Try one more time after a delay
-          await Future.delayed(const Duration(seconds: 2));
-          try {
-            await _room!.localParticipant?.setCameraEnabled(true);
-            await _room!.localParticipant?.setMicrophoneEnabled(true);
-          } catch (retryError) {
-            print("Retry failed: $retryError");
-          }
-        }
-      } else {
-        // Watchers don't publish video/audio
-        await _room!.localParticipant?.setCameraEnabled(false);
-        await _room!.localParticipant?.setMicrophoneEnabled(false);
-        print("Camera and Mic disabled for watcher");
-        
-        setState(() {
-          _statusMessage = "👀 Ready to watch";
-          _connectionProgress = 95;
-        });
-      }
+    }
+  }
 
-      // Step 6: Final setup
-      setState(() {
-        _statusMessage = "✅ All set!";
-        _connectionProgress = 100;
-      });
-      
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      if (mounted) {
-        setState(() {
-          _isConnected = true;
-          _isConnecting = false;
-          _isMicEnabled = widget.isHost;
-          _isCameraEnabled = widget.isHost;
-        });
-        
-        // START TIMER ONLY NOW - After everything is ready!
-        if (widget.isHost && !_timerStarted) {
-          _startTimer();
-        }
-      }
-      
-    } catch (e) {
-      print('Failed to connect: $e');
-      setState(() {
-        _statusMessage = "❌ Connection failed";
-        _isConnecting = false;
-        _connectionProgress = 0;
-      });
-      
+  // Submits move to database when performance is finished (only for performer)
+  Future<void> _finishPerformance() async {
+    if (_moveSubmitted || !widget.isHost) return; 
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() => _moveSubmitted = true);
+    _battleTimer?.cancel();
+
+    try {
+      final move = MoveModel(
+        id: uuid.v4(),
+        title: widget.moveTitle,
+        link: 'LIVE_PERFORMANCE_ROUND_${widget.battleId}',
+        submittedByUid: user.uid,
+        round: 1, // KEEP from working file
+        submittedAt: DateTime.now(),
+        votes: const {},
+      );
+
+      // Create minimal BattleModel (Required by the submitMove method) - KEEP from working file
+      final tempBattle = BattleModel(
+          id: widget.battleId, 
+          challengerUid: widget.hostId ?? '', 
+          opponentUid: widget.player2Id ?? '', 
+          currentTurnUid: user.uid, 
+          maxRounds: 1, 
+          currentRound: 1, 
+          genre: '', 
+          status: BattleStatus.active, 
+          moves: [], 
+          createdAt: DateTime.now(), 
+      );
+
+      // Call Service logic to flip turn atomically
+      await ref.read(battleServiceProvider).submitMove(widget.battleId, move);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Connection Failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Live move recorded! Turn flipped.'), backgroundColor: Colors.green),
         );
+      }
+    } catch (e) {
+      print('Error submitting live move: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error submitting move: $e'), backgroundColor: Colors.red),
+        );
+      }
+      setState(() => _moveSubmitted = false);
+    }
+  }
+
+  // 🏆 FINAL FIX: Guards the disconnect call to prevent TimeoutException crash.
+  Future<void> _safelyDisconnectAndPop(bool signalCompletion) async {
+    if (!mounted) return;
+
+    // Try to disconnect gracefully, but set a short timeout.
+    try {
+      await _room?.disconnect().timeout(const Duration(seconds: 3));
+    } catch (e) {
+      print("⚠️ LiveKit Disconnect failed gracefully (Timeout/Error): $e");
+    }
+
+    // CRITICAL: Send the signal and close the screen regardless of disconnect success.
+    if (mounted) {
+      if (signalCompletion) {
+        Navigator.pop(context, 'COMPLETED'); // Signal turn flip to BattleDetailScreen
+      } else {
+        Navigator.pop(context); // Standard exit
       }
     }
   }
 
-  // KEEPING YOUR EXISTING _sortParticipants LOGIC
+  void _handleEndBattle() {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('End Performance?'),
+          content: Text(widget.isHost ? 'Are you sure you want to end your performance?' : 'Are you sure you want to leave?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                if (!_moveSubmitted && widget.isHost) {
+                  _finishPerformance().then((_) {
+                    _safelyDisconnectAndPop(true);
+                  }).catchError((e) {
+                    _safelyDisconnectAndPop(false);
+                  });
+                } else {
+                  _safelyDisconnectAndPop(false);
+                }
+              },
+              child: const Text('End/Leave', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+  
+  @override
+  void dispose() {
+    _battleTimer?.cancel();
+    _listener?.dispose();
+    
+    if (_room != null) {
+        _room!.disconnect().catchError((e) {
+            print("⚠️ LiveKit room failed to disconnect cleanly on dispose: $e");
+        });
+        _room!.dispose();
+    }
+    
+    super.dispose();
+  }
+  
+  // --- UI/HELPER METHODS ---
+
   void _sortParticipants() {
     if (_room == null) return;
     
     List<ParticipantTrack> userMediaTracks = [];
     
-    // Add local participant (only if performer)
     if (_room!.localParticipant != null && widget.isHost) {
       for (final track in _room!.localParticipant!.videoTrackPublications) {
         if (track.track != null) {
@@ -378,7 +442,6 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
       }
     }
     
-    // Add remote participants
     for (final participant in _room!.remoteParticipants.values) {
       for (final track in participant.videoTrackPublications) {
         if (track.track != null && track.subscribed) {
@@ -398,313 +461,20 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
     }
   }
 
-  // Submit move to database when performance is finished (only for performer)
-  Future<void> _finishPerformance() async {
-    if (_moveSubmitted || !widget.isHost) return; // Only performer can submit
-    
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      // Mark as submitted immediately to prevent duplicates
-      setState(() {
-        _moveSubmitted = true;
-      });
-
-      final moveData = {
-        'userId': user.uid,
-        'username': user.displayName ?? 'Anonymous',
-        'moveTitle': widget.moveTitle,
-        'videoUrl': 'live_battle_${widget.battleId}_${DateTime.now().millisecondsSinceEpoch}',
-        'votes': 0,
-        'createdAt': FieldValue.serverTimestamp(),
-        'isLiveBattle': true,
-        'duration': 90 - _secondsRemaining, // How long they performed
-      };
-
-      // Add move to the battle's moves subcollection
-      await FirebaseFirestore.instance
-          .collection('battles')
-          .doc(widget.battleId)
-          .collection('moves')
-          .add(moveData);
-
-      // Update battle status
-      final updateData = <String, dynamic>{};
-      
-      // Switch turns
-      updateData['currentTurn'] = widget.isHost 
-        ? (widget.player2Id ?? '') 
-        : (widget.hostId ?? '');
-      
-      updateData['lastActivity'] = FieldValue.serverTimestamp();
-
-      // Check if battle should end
-      final battleDoc = await FirebaseFirestore.instance
-          .collection('battles')
-          .doc(widget.battleId)
-          .get();
-      
-      final battleData = battleDoc.data();
-      final currentRound = battleData?['currentRound'] ?? 1;
-      final maxRounds = battleData?['maxRounds'] ?? 1;
-      
-      // If both players have performed in the final round, end the battle
-      if (currentRound >= maxRounds && !widget.isHost) {
-        updateData['status'] = 'voting';
-        updateData['votingStartTime'] = FieldValue.serverTimestamp();
-      }
-
-      await FirebaseFirestore.instance
-          .collection('battles')
-          .doc(widget.battleId)
-          .update(updateData);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Performance submitted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error submitting live move: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error submitting move: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      // Reset submission state on error
-      setState(() {
-        _moveSubmitted = false;
-      });
-    }
-  }
-
-  void _handleEndBattle() {
-    // Submit move if not already submitted (performer only)
-    if (!_moveSubmitted && widget.isHost) {
-      _finishPerformance().then((_) {
-        Navigator.pop(context);
-      });
-    } else {
-      Navigator.pop(context);
-    }
-  }
-
-  @override
-  void dispose() {
-    _battleTimer?.cancel();
-    _listener?.dispose();
-    _room?.disconnect();
-    _room?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Column(
-          children: [
-            Text(
-              widget.isHost ? '🔴 Live Performance' : '👀 Watching Live',
-              style: const TextStyle(fontSize: 16),
-            ),
-            Text(
-              widget.moveTitle,
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.red),
-            onPressed: _handleEndBattle,
-          ),
-        ],
+  Widget _buildControlButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    Color color = Colors.white,
+  }) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.black54,
+        shape: BoxShape.circle,
       ),
-      body: Stack(
-        children: [
-          // Main content based on connection state
-          if (_isConnecting)
-            _buildConnectingView()
-          else if (_isConnected && participantTracks.isNotEmpty)
-            widget.isHost 
-              ? _buildPerformerView() 
-              : _buildWatcherView()
-          else if (_isConnected)
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    widget.isHost ? Icons.videocam : Icons.remove_red_eye,
-                    color: Colors.white,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    widget.isHost 
-                      ? "Finalizing setup..." 
-                      : "Waiting for performer to start...",
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                ],
-              ),
-            )
-          else
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                  const SizedBox(height: 16),
-                  Text(
-                    _statusMessage,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                    onPressed: () {
-                      setState(() {
-                        _isConnecting = true;
-                      });
-                      _initializeConnection();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          
-          // TIMER OVERLAY (only for performer after connection)
-          if (widget.isHost && _isConnected && _timerStarted)
-            Positioned(
-              top: 20,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _secondsRemaining <= 10 ? Colors.red : Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_secondsRemaining <= 10)
-                        const Icon(Icons.warning, color: Colors.white, size: 20),
-                      if (_secondsRemaining <= 10)
-                        const SizedBox(width: 8),
-                      Text(
-                        '${_secondsRemaining}s',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          
-          // LIVE INDICATOR
-          if (_isConnected)
-            Positioned(
-              top: widget.isHost && _timerStarted ? 60 : 20,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.circle, size: 8, color: Colors.white),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.isHost ? 'LIVE' : 'WATCHING',
-                      style: const TextStyle(
-                        color: Colors.white, 
-                        fontSize: 12, 
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          
-          // CONTROLS (only for performer)
-          if (widget.isHost && _isConnected)
-            Positioned(
-              bottom: 20,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Mic toggle
-                  _buildControlButton(
-                    icon: _isMicEnabled ? Icons.mic : Icons.mic_off,
-                    onPressed: () async {
-                      final newState = !_isMicEnabled;
-                      await _room?.localParticipant?.setMicrophoneEnabled(newState);
-                      setState(() {
-                        _isMicEnabled = newState;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 20),
-                  // Camera toggle
-                  _buildControlButton(
-                    icon: _isCameraEnabled ? Icons.videocam : Icons.videocam_off,
-                    onPressed: () async {
-                      final newState = !_isCameraEnabled;
-                      await _room?.localParticipant?.setCameraEnabled(newState);
-                      setState(() {
-                        _isCameraEnabled = newState;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 20),
-                  // End call
-                  _buildControlButton(
-                    icon: Icons.call_end,
-                    color: Colors.red,
-                    onPressed: _handleEndBattle,
-                  ),
-                  const SizedBox(width: 20),
-                  // Submit move button
-                  if (!_moveSubmitted)
-                    _buildControlButton(
-                      icon: Icons.check_circle,
-                      color: Colors.green,
-                      onPressed: () {
-                        _finishPerformance().then((_) {
-                          Navigator.pop(context);
-                        });
-                      },
-                    ),
-                ],
-              ),
-            ),
-        ],
+      child: IconButton(
+        icon: Icon(icon, color: color),
+        iconSize: 28,
+        onPressed: onPressed,
       ),
     );
   }
@@ -714,7 +484,6 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Animated progress indicator
           Stack(
             alignment: Alignment.center,
             children: [
@@ -741,8 +510,6 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
             ],
           ),
           const SizedBox(height: 32),
-          
-          // Status message with icon
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -750,7 +517,7 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
                 const Icon(Icons.check_circle, color: Colors.green, size: 20)
               else if (_statusMessage.contains('❌'))
                 const Icon(Icons.error, color: Colors.red, size: 20)
-              else if (_statusMessage.contains('📸'))
+              else if (_statusMessage.contains('📸') || _statusMessage.contains('🎬'))
                 const Icon(Icons.camera_alt, color: Colors.white, size: 20)
               else if (_statusMessage.contains('🎤'))
                 const Icon(Icons.mic, color: Colors.white, size: 20)
@@ -780,7 +547,6 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
           ),
           const SizedBox(height: 48),
           
-          // Tips while waiting
           if (_connectionProgress < 50)
             Container(
               padding: const EdgeInsets.all(16),
@@ -816,34 +582,16 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
   }
 
   Widget _buildPerformerView() {
-    // Performer sees their own camera
     if (participantTracks.isEmpty) {
-      return const Center(
-        child: Text("Setting up camera...", style: TextStyle(color: Colors.white)),
-      );
-    }
-    
-    return SizedBox(
-      width: double.infinity,
-      height: double.infinity,
-      child: VideoTrackRenderer(
-        participantTracks[0].videoTrack,
-      ),
-    );
-  }
-
-  Widget _buildWatcherView() {
-    // Watchers see the performer's stream
-    if (participantTracks.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.hourglass_empty, color: Colors.white, size: 48),
-            SizedBox(height: 16),
+            const Icon(Icons.videocam_off, color: Colors.white, size: 48),
+            const SizedBox(height: 16),
             Text(
-              "Waiting for performer to start...",
-              style: TextStyle(color: Colors.white, fontSize: 16),
+              _isCameraEnabled ? "Setting up camera..." : "Camera disabled",
+              style: const TextStyle(color: Colors.white)
             ),
           ],
         ),
@@ -854,31 +602,209 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
       width: double.infinity,
       height: double.infinity,
       child: VideoTrackRenderer(
-        participantTracks[0].videoTrack, // Show first (performer's) video
+        participantTracks[0].videoTrack,
+        fit: VideoViewFit.cover, 
       ),
     );
   }
 
-  Widget _buildControlButton({
-    required IconData icon,
-    required VoidCallback onPressed,
-    Color color = Colors.white,
-  }) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.black54,
-        shape: BoxShape.circle,
+  Widget _buildWatcherView() {
+    if (participantTracks.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.hourglass_empty, color: Colors.white, size: 48),
+            SizedBox(height: 16),
+            Text("Waiting for performer to start...", style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+      );
+    }
+    
+    return SizedBox(
+      width: double.infinity,
+      height: double.infinity,
+      child: VideoTrackRenderer(
+        participantTracks[0].videoTrack,
+        fit: VideoViewFit.cover, 
       ),
-      child: IconButton(
-        icon: Icon(icon, color: color),
-        iconSize: 28,
-        onPressed: onPressed,
+    );
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: WillPopScope(
+        onWillPop: () async {
+          _handleEndBattle();
+          return false;
+        },
+        child: Stack(
+          children: [
+            if (_isConnecting)
+              _buildConnectingView()
+            else if (_isConnected && participantTracks.isNotEmpty)
+              widget.isHost 
+                ? _buildPerformerView() 
+                : _buildWatcherView()
+            else if (_isConnected)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(widget.isHost ? Icons.videocam : Icons.remove_red_eye, color: Colors.white, size: 48),
+                    const SizedBox(height: 16),
+                    Text(widget.isHost ? "Finalizing setup..." : "Waiting for performer to start...", style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  ],
+                ),
+              )
+            else
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                    const SizedBox(height: 16),
+                    Text(_statusMessage, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry Connection'),
+                      onPressed: () {
+                        setState(() { 
+                          _isConnecting = true;
+                          _connectionProgress = 10;
+                        });
+                        _initializeConnection();
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    if (_statusMessage.contains('getUserMedia') || _statusMessage.contains('permission'))
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(Icons.info, color: Colors.amber),
+                            SizedBox(height: 8),
+                            Text(
+                              'Browser Permission Tip:',
+                              style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              '1. Click the camera/mic icon in your browser\'s address bar\n'
+                              '2. Select "Allow" for camera and microphone\n'
+                              '3. Refresh the page',
+                              style: TextStyle(color: Colors.white, fontSize: 12),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            
+            // TIMER OVERLAY 
+            if (widget.isHost && _isConnected && _timerStarted)
+              Positioned(
+                top: 20,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _secondsRemaining <= 10 ? Colors.red : Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_secondsRemaining <= 10) const Icon(Icons.warning, color: Colors.white, size: 20),
+                        if (_secondsRemaining <= 10) const SizedBox(width: 8),
+                        Text('${_secondsRemaining}s', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              
+            // LIVE INDICATOR
+            if (_isConnected)
+              Positioned(
+                top: widget.isHost && _timerStarted ? 60 : 20,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.circle, size: 8, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(widget.isHost ? 'LIVE' : 'WATCHING', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+
+            // CONTROLS (only for performer)
+            if (widget.isHost && _isConnected)
+              Positioned(
+                bottom: 20,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildControlButton(icon: _isMicEnabled ? Icons.mic : Icons.mic_off, onPressed: () async {
+                        final newState = !_isMicEnabled;
+                        await _room?.localParticipant?.setMicrophoneEnabled(newState);
+                        setState(() { _isMicEnabled = newState; });
+                      },
+                    ),
+                    const SizedBox(width: 20),
+                    _buildControlButton(icon: _isCameraEnabled ? Icons.videocam : Icons.videocam_off, onPressed: () async {
+                        final newState = !_isCameraEnabled;
+                        await _room?.localParticipant?.setCameraEnabled(newState);
+                        setState(() { _isCameraEnabled = newState; });
+                      },
+                    ),
+                    const SizedBox(width: 20),
+                    _buildControlButton(icon: Icons.call_end, color: Colors.red, onPressed: _handleEndBattle),
+                    const SizedBox(width: 20),
+                    if (!_moveSubmitted)
+                      _buildControlButton(
+                        icon: Icons.check_circle,
+                        color: Colors.green,
+                        onPressed: () {
+                          _finishPerformance().then((_) {
+                            _safelyDisconnectAndPop(true);
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// Helper class to track participants
 class ParticipantTrack {
   final Participant participant;
   final VideoTrack videoTrack;

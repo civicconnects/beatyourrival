@@ -1,5 +1,3 @@
-// lib/services/battle_service.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,7 +24,6 @@ final battleMovesStreamProvider = StreamProvider.family<List<MoveModel>, String>
   return ref.watch(battleServiceProvider).streamBattleMoves(battleId);
 });
 
-// NEW PROVIDERS FOR ACTIVE AND COMPLETED BATTLES
 final userActiveBattlesStreamProvider = StreamProvider.family<List<BattleModel>, String>((ref, userId) {
   return ref.watch(battleServiceProvider).streamUserActiveBattles(userId);
 });
@@ -62,9 +59,10 @@ class BattleService {
       status: BattleStatus.pending,
       currentRound: 1,
       maxRounds: maxRounds,
-      currentTurnUid: challengerUid, // Challenger goes first
+      currentTurnUid: challengerUid,
       createdAt: DateTime.now(),
       moves: [],
+      movesCount: {},
     );
 
     await battleRef.set(battle.toMap());
@@ -159,7 +157,6 @@ class BattleService {
         .orderBy('submittedAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      // Explicitly type the list to avoid type inference issues
       final List<MoveModel> moves = [];
       for (final doc in snapshot.docs) {
         moves.add(MoveModel.fromMap(doc.data(), doc.id));
@@ -190,79 +187,59 @@ class BattleService {
     });
   }
 
-  // Submit a move with enhanced debug logging
-  Future<void> submitMove(BattleModel battle, MoveModel move) async {
-    debugPrint('🎯 SUBMIT MOVE CALLED - Battle ID: ${battle.id}');
-    debugPrint('📊 Current Round: ${battle.currentRound} / Max Rounds: ${battle.maxRounds}');
-    debugPrint('👤 Current Turn: ${battle.currentTurnUid}');
-    debugPrint('📝 Move submitted by: ${move.submittedByUid}');
-    debugPrint('🎵 Move title: ${move.title}');
-    
-    final battleDocRef = _firestore.collection('battles').doc(battle.id!);
-    
-    // Add the move to the moves subcollection
-    await battleDocRef.collection('moves').add(move.toMap());
-    debugPrint('✅ Move added to database');
-    
-    // Determine the next turn
-    final nextTurnUid = (battle.currentTurnUid == battle.challengerUid)
-        ? battle.opponentUid
-        : battle.challengerUid;
-    
-    debugPrint('🔄 Next turn will be: $nextTurnUid');
-    debugPrint('   - Challenger: ${battle.challengerUid}');
-    debugPrint('   - Opponent: ${battle.opponentUid}');
-    
-    // Check if we need to advance the round
-    final movesSnapshot = await battleDocRef
-        .collection('moves')
-        .where('round', isEqualTo: battle.currentRound)
-        .get();
-    
-    final movesThisRound = movesSnapshot.docs.length;
-    debugPrint('📊 Moves submitted this round: $movesThisRound');
-    
-    // List all moves for debugging
-    for (var moveDoc in movesSnapshot.docs) {
-      final moveData = moveDoc.data();
-      debugPrint('   - Move by ${moveData['submittedByUid']}: ${moveData['title']}');
-    }
-    
-    Map<String, dynamic> updates = {
-      'currentTurnUid': nextTurnUid,
-      'lastActivity': FieldValue.serverTimestamp(),
-    };
-    
-    // If both players have submitted moves for this round
-    if (movesThisRound >= 2) {
-      debugPrint('🎉 Both players have submitted for round ${battle.currentRound}');
-      
-      if (battle.currentRound < battle.maxRounds) {
-        // Advance to the next round
-        updates['currentRound'] = battle.currentRound + 1;
-        debugPrint('➡️ Advancing to round ${battle.currentRound + 1}');
-        debugPrint('   Still ${battle.maxRounds - battle.currentRound} rounds remaining');
-      } else {
-        // Battle is complete, move to voting phase
-        updates['status'] = 'completed';
-        debugPrint('🏁 Battle complete! All ${battle.maxRounds} rounds finished');
-        debugPrint('📊 Moving to voting phase');
-      }
-    } else {
-      debugPrint('⏳ Waiting for other player to submit their move');
-      debugPrint('   Need ${2 - movesThisRound} more move(s) for this round');
-    }
-    
-    // Update the battle document
-    debugPrint('📝 Updating battle document with:');
-    updates.forEach((key, value) {
-      debugPrint('   - $key: $value');
-    });
-    
-    await battleDocRef.update(updates);
-    debugPrint('✅ Battle document updated successfully');
-    debugPrint('🎯 SUBMIT MOVE COMPLETED\n');
+  // ✅ RACE-FREE SUBMIT MOVE (NEW IMPLEMENTATION)
+  Future<void> submitMove(String battleId, MoveModel move) async { // <-- FIX 1: Accepts String battleId
+  final battleDocRef = _firestore.collection('battles').doc(battleId);
+  
+  // 1. NON-ATOMIC READS: Get the necessary data for checks
+  
+  // A) Read the battle document itself to get currentTurnUid and round
+  final battleSnapshot = await battleDocRef.get();
+  if (!battleSnapshot.exists) {
+      throw Exception("Battle document not found.");
   }
+  final battle = BattleModel.fromMap(battleSnapshot.data()!, id: battleId); // <-- FIX 2: Create model internally
+
+  // B) Get moves count (Must be outside the transaction)
+  final movesSnapshotBefore = await battleDocRef
+      .collection('moves')
+      .where('round', isEqualTo: battle.currentRound)
+      .get();
+  
+  final movesThisRoundIncludingCurrent = movesSnapshotBefore.docs.length + 1;
+  
+  // 2. Determine updates based on count (Logic)
+  final nextTurnUid = (battle.currentTurnUid == battle.challengerUid)
+      ? battle.opponentUid
+      : battle.challengerUid;
+
+  Map<String, dynamic> updates = {
+    'currentTurnUid': nextTurnUid, // Flips the turn
+    'lastActivity': FieldValue.serverTimestamp(),
+  };
+
+  if (movesThisRoundIncludingCurrent == 2) {
+    if (battle.currentRound < battle.maxRounds) {
+      updates['currentRound'] = battle.currentRound + 1;
+      updates['currentTurnUid'] = battle.challengerUid; // Challenger starts new round
+    } else {
+      updates['status'] = 'completed';
+    }
+  }
+
+  // 3. ATOMIC WRITE: Use a Transaction to guarantee the move and status update commit together
+  await _firestore.runTransaction((transaction) async {
+    // Save the new move (atomic write 1)
+    final moveDocRef = battleDocRef.collection('moves').doc(move.id);
+    transaction.set(moveDocRef, move.toMap());
+
+    // Update the battle status (atomic write 2)
+    transaction.update(battleDocRef, updates);
+  }).catchError((error) {
+    print('❌ Submission Transaction failed: $error');
+    throw Exception('Failed to submit move and flip turn: $error'); 
+  });
+}
 
   // Vote for a move
   Future<void> voteForMove(String battleId, String moveId, String voterId, int score) async {
@@ -301,28 +278,21 @@ class BattleService {
       
       if (move.submittedByUid == battle.challengerUid) {
         challengerScore += totalVotes;
-        debugPrint('   Challenger move: ${move.title} - Score: $totalVotes');
       } else if (move.submittedByUid == battle.opponentUid) {
         opponentScore += totalVotes;
-        debugPrint('   Opponent move: ${move.title} - Score: $totalVotes');
       }
     }
     
-    debugPrint('📊 Final Scores:');
-    debugPrint('   - Challenger: $challengerScore');
-    debugPrint('   - Opponent: $opponentScore');
+    debugPrint('📊 Final Scores: Challenger=$challengerScore, Opponent=$opponentScore');
     
     // Determine winner
     String? winnerUid;
     if (challengerScore > opponentScore) {
       winnerUid = battle.challengerUid;
-      debugPrint('🎉 Winner: Challenger (${battle.challengerUid})');
     } else if (opponentScore > challengerScore) {
       winnerUid = battle.opponentUid;
-      debugPrint('🎉 Winner: Opponent (${battle.opponentUid})');
     } else {
       winnerUid = 'Draw';
-      debugPrint('🤝 Result: Draw!');
     }
     
     // Update battle with final results
