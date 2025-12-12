@@ -45,5 +45,45 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- ===== NETWORK & SECURITY CONFIGURATION ===== -->
+	
+	<!-- App Transport Security: Allow HTTP/HTTPS connections for development -->
+	<!-- WARNING: Set NSAllowsArbitraryLoads to false for production! -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	
+	<!-- ===== PERMISSIONS FOR VIDEO BATTLES ===== -->
+	
+	<!-- Camera Permission (Required for LiveKit video) -->
+	<key>NSCameraUsageDescription</key>
+	<string>BeatRivals needs camera access for live video battles with your friends</string>
+	
+	<!-- Microphone Permission (Required for LiveKit audio) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>BeatRivals needs microphone access for live audio during battles</string>
+	
+	<!-- Local Network Permission (iOS 14+, for development/Ngrok) -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>BeatRivals needs local network access to connect during development</string>
+	
+	<!-- Bonjour Services (for local network discovery) -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+	</array>
+	
+	<!-- ===== BACKGROUND MODES (Optional, for real-time updates) ===== -->
+	
+	<!-- Enable background modes for audio and notifications -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
