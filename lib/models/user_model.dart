@@ -22,6 +22,10 @@ class UserModel {
 
   final List<String> friends;
   final List<String> friendRequests;
+  
+  // ✅ NEW: Premium and Trial fields
+  final bool isPremium;
+  final DateTime? premiumExpiresAt;
 
   UserModel({
     required this.uid,
@@ -38,8 +42,35 @@ class UserModel {
     this.isStatsPublic = true,
     this.isSilentMode = false, // Default is OFF (receive notifications)
     this.friends = const [], 
-    this.friendRequests = const [], 
+    this.friendRequests = const [],
+    this.isPremium = false,  // Default: free trial user
+    this.premiumExpiresAt,
   });
+  
+  // ✅ Check if user is in 3-day trial period
+  bool get isInTrialPeriod {
+    final daysSinceCreation = DateTime.now().difference(createdAt).inDays;
+    return daysSinceCreation < 3;  // First 3 days = trial
+  }
+  
+  // ✅ Check if user has active premium subscription
+  bool get hasActivePremium {
+    if (!isPremium) return false;
+    if (premiumExpiresAt == null) return true;  // Lifetime premium
+    return DateTime.now().isBefore(premiumExpiresAt!);
+  }
+  
+  // ✅ Check if user can access battles (premium OR in trial)
+  bool get canAccessBattles {
+    return hasActivePremium || isInTrialPeriod;
+  }
+  
+  // ✅ Get days remaining in trial
+  int get trialDaysRemaining {
+    if (!isInTrialPeriod) return 0;
+    final daysSinceCreation = DateTime.now().difference(createdAt).inDays;
+    return 3 - daysSinceCreation;
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -54,9 +85,11 @@ class UserModel {
       'isOnline': isOnline,
       'isReadyToBattle': isReadyToBattle,
       'isStatsPublic': isStatsPublic,
-      'isSilentMode': isSilentMode, // Add to map
+      'isSilentMode': isSilentMode,
       'friends': friends, 
-      'friendRequests': friendRequests, 
+      'friendRequests': friendRequests,
+      'isPremium': isPremium,
+      'premiumExpiresAt': premiumExpiresAt != null ? Timestamp.fromDate(premiumExpiresAt!) : null,
     };
   }
 
@@ -79,9 +112,13 @@ class UserModel {
       isOnline: map['isOnline'] as bool? ?? false,
       isReadyToBattle: map['isReadyToBattle'] as bool? ?? false,
       isStatsPublic: map['isStatsPublic'] as bool? ?? true,
-      isSilentMode: map['isSilentMode'] as bool? ?? false, // Add to factory
+      isSilentMode: map['isSilentMode'] as bool? ?? false,
       friends: castList(map['friends']), 
-      friendRequests: castList(map['friendRequests']), 
+      friendRequests: castList(map['friendRequests']),
+      isPremium: map['isPremium'] as bool? ?? false,
+      premiumExpiresAt: map['premiumExpiresAt'] != null 
+        ? (map['premiumExpiresAt'] as Timestamp).toDate()
+        : null,
     );
   }
 }
