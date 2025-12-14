@@ -77,19 +77,6 @@ class ActivityService {
     await _activityCollection.add(activity.toMap());
   }
   
-  Future<void> logBattleCompleted(String battleId, String challengerUid, String opponentUid, String? winnerUid) async {
-    final activity = ActivityModel(
-      id: '',
-      type: ActivityType.battleCompleted,
-      timestamp: DateTime.now(),
-      participants: [challengerUid, opponentUid],
-      actorUid: winnerUid ?? challengerUid, // Winner is the actor, or challenger if draw
-      targetUid: winnerUid == challengerUid ? opponentUid : challengerUid,
-      battleId: battleId,
-    );
-    await _activityCollection.add(activity.toMap());
-  }
-  
   Future<void> logChallengeCanceled(String battleId, String challengerUid, String opponentUid) async {
     final activity = ActivityModel(
       id: '',

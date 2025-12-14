@@ -579,14 +579,16 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
       
       // ✅ Log battle completion activity
       try {
-        // Get updated battle to get winnerUid
+        // Get updated battle to get winnerUid and scores
         final updatedBattle = await ref.read(battleServiceProvider).streamBattle(battle.id!).first;
-        if (updatedBattle != null) {
+        if (updatedBattle != null && updatedBattle.winnerUid != null) {
           await ref.read(activityServiceProvider).logBattleCompleted(
             battle.id!,
             battle.challengerUid,
             battle.opponentUid,
-            updatedBattle.winnerUid,
+            updatedBattle.winnerUid!,
+            challengerScore: updatedBattle.challengerFinalScore,
+            opponentScore: updatedBattle.opponentFinalScore,
           );
         }
       } catch (activityError) {
