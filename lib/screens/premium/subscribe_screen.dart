@@ -82,11 +82,8 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
       // 3. Present payment sheet with client secret
       // 4. On success, update Firestore user document
       
-      _showSnackBar(
-        'Payment integration pending! '
-        'Please set up Firebase Functions as described in STRIPE_SETUP_GUIDE.md',
-        isError: true,
-      );
+      // v1.0 Launch: Show "Coming Soon" message
+      _showComingSoonDialog();
 
       // Placeholder for actual payment flow:
       // final result = await _presentPaymentSheet(clientSecret);
@@ -154,6 +151,32 @@ class _SubscribeScreenState extends ConsumerState<SubscribeScreen> {
     // and update Firestore accordingly
     
     _showSnackBar('Restore purchase feature coming soon!', isError: false);
+  }
+
+  void _showComingSoonDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Coming Soon!'),
+          ],
+        ),
+        content: Text(
+          'Premium subscriptions will be available soon!\n\n'
+          'We\'re finalizing payment processing. In the meantime, '
+          'enjoy your trial and stay tuned for updates!',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Got it!'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnackBar(String message, {required bool isError}) {
