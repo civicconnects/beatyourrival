@@ -211,9 +211,8 @@ class _VideoRecordingScreenState extends ConsumerState<VideoRecordingScreen> {
 
       print('🎯 Submitting move with video URL...');
       await ref.read(battleServiceProvider).submitMove(
-            battleId: widget.battleId,
-            move: move,
-            battle: widget.battle,
+            widget.battleId,
+            move,
           );
 
       print('✅ Move submitted successfully!');
