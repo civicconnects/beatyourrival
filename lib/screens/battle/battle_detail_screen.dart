@@ -7,6 +7,7 @@ import '../../models/move_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/battle_service.dart';
 import '../../services/user_service.dart';
+import '../../services/activity_service.dart';
 import 'live_battle_screen.dart';
 
 const uuid = Uuid();
@@ -575,6 +576,23 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
     setState(() { _isFinalizing = true; });
     try {
       await ref.read(battleServiceProvider).finalizeBattle(battle.id!);
+      
+      // ✅ Log battle completion activity
+      try {
+        // Get updated battle to get winnerUid
+        final updatedBattle = await ref.read(battleServiceProvider).streamBattle(battle.id!).first;
+        if (updatedBattle != null) {
+          await ref.read(activityServiceProvider).logBattleCompleted(
+            battle.id!,
+            battle.challengerUid,
+            battle.opponentUid,
+            updatedBattle.winnerUid,
+          );
+        }
+      } catch (activityError) {
+        print('⚠️ Failed to log battle completion activity: $activityError');
+        // Don't fail the finalization if activity logging fails
+      }
       
       if(mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
