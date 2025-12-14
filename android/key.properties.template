@@ -1,0 +1,9 @@
+# Android Key Properties
+# IMPORTANT: This file contains sensitive information!
+# DO NOT commit this file to Git
+# Copy this to key.properties and fill in your actual values
+
+storePassword=YOUR_KEYSTORE_PASSWORD_HERE
+keyPassword=YOUR_KEY_PASSWORD_HERE
+keyAlias=beatrivals
+storeFile=beatrivals-release.jks
