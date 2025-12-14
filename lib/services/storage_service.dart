@@ -20,23 +20,38 @@ class StorageService {
     required File videoFile,
   }) async {
     try {
+      print('🚀 Starting uploadBattleVideo...');
+      
       final user = _auth.currentUser;
       if (user == null) {
         print('❌ StorageService: No authenticated user');
         return null;
       }
+      print('✅ User authenticated: ${user.uid}');
+
+      // Check if file exists
+      final fileExists = await videoFile.exists();
+      if (!fileExists) {
+        print('❌ Video file does not exist: ${videoFile.path}');
+        return null;
+      }
+      print('✅ Video file exists: ${videoFile.path}');
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = '${battleId}_$timestamp.mp4';
       final path = 'battle_videos/${user.uid}/$fileName';
 
       print('📤 Uploading video to: $path');
-      print('📦 File size: ${await videoFile.length()} bytes');
+      final fileSize = await videoFile.length();
+      print('📦 File size: $fileSize bytes (${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB)');
 
       // Create reference
+      print('📂 Creating Firebase Storage reference...');
       final ref = _storage.ref().child(path);
+      print('✅ Storage reference created: ${ref.fullPath}');
 
       // Upload file with metadata
+      print('📤 Starting upload task...');
       final uploadTask = ref.putFile(
         videoFile,
         SettableMetadata(
@@ -48,16 +63,25 @@ class StorageService {
           },
         ),
       );
+      print('✅ Upload task created');
 
       // Monitor upload progress
+      int lastProgress = 0;
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
         final progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        print('⏳ Upload progress: ${progress.toStringAsFixed(1)}%');
+        final progressInt = progress.toInt();
+        if (progressInt != lastProgress && progressInt % 10 == 0) {
+          print('⏳ Upload progress: ${progress.toStringAsFixed(1)}% (${snapshot.bytesTransferred}/${snapshot.totalBytes} bytes)');
+          lastProgress = progressInt;
+        }
       });
 
       // Wait for completion
+      print('⏳ Waiting for upload to complete...');
       final snapshot = await uploadTask;
+      print('✅ Upload completed! Getting download URL...');
       final downloadUrl = await snapshot.ref.getDownloadURL();
+      print('✅ Download URL obtained');
 
       print('✅ Video uploaded successfully!');
       print('🔗 Download URL: $downloadUrl');
