@@ -236,11 +236,15 @@ class BattleService {
       updates['currentRound'] = battle.currentRound + 1;
       updates['currentTurnUid'] = battle.challengerUid; // Challenger starts new round
     } else {
-      print('  🏁 MARKING BATTLE AS COMPLETED');
+      print('  🚨🚨🚨 CRITICAL: MARKING BATTLE AS COMPLETED 🚨🚨🚨');
+      print('  This means submitMove() thinks BOTH players have played!');
+      print('  currentRound: ${battle.currentRound}');
+      print('  maxRounds: ${battle.maxRounds}');
       updates['status'] = 'completed';
     }
   } else {
     print('  ✅ Only ${movesThisRoundIncludingCurrent} move(s) - keeping battle active');
+    print('  Battle will remain status: active');
   }
 
   // 3. ATOMIC WRITE: Use a Transaction to guarantee the move and status update commit together
@@ -272,7 +276,11 @@ class BattleService {
 
   // Finalize battle and calculate winner
   Future<void> finalizeBattle(String battleId) async {
+    debugPrint('🏆 ========================================');
     debugPrint('🏆 FINALIZING BATTLE: $battleId');
+    debugPrint('🏆 ⚠️  WARNING: This should ONLY be called manually by user clicking "Finalize" button!');
+    debugPrint('🏆 Stack trace: ${StackTrace.current}');
+    debugPrint('🏆 ========================================');
     
     final battleDoc = await _firestore.collection('battles').doc(battleId).get();
     final battle = BattleModel.fromMap(battleDoc.data()!, id: battleId);
