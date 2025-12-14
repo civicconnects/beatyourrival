@@ -208,10 +208,21 @@ class BattleService {
   
   final movesThisRoundIncludingCurrent = movesSnapshotBefore.docs.length + 1;
   
+  // 🔍 DEBUG LOGGING
+  print('📊 SUBMIT MOVE DEBUG:');
+  print('  battleId: $battleId');
+  print('  currentRound: ${battle.currentRound}');
+  print('  maxRounds: ${battle.maxRounds}');
+  print('  movesSnapshotBefore.docs.length: ${movesSnapshotBefore.docs.length}');
+  print('  movesThisRoundIncludingCurrent: $movesThisRoundIncludingCurrent');
+  print('  currentTurnUid (before): ${battle.currentTurnUid}');
+  
   // 2. Determine updates based on count (Logic)
   final nextTurnUid = (battle.currentTurnUid == battle.challengerUid)
       ? battle.opponentUid
       : battle.challengerUid;
+  
+  print('  nextTurnUid (after): $nextTurnUid');
 
   Map<String, dynamic> updates = {
     'currentTurnUid': nextTurnUid, // Flips the turn
@@ -219,12 +230,17 @@ class BattleService {
   };
 
   if (movesThisRoundIncludingCurrent == 2) {
+    print('  ⚠️ 2 MOVES DETECTED - Completing round or battle');
     if (battle.currentRound < battle.maxRounds) {
+      print('  ➡️ Advancing to next round');
       updates['currentRound'] = battle.currentRound + 1;
       updates['currentTurnUid'] = battle.challengerUid; // Challenger starts new round
     } else {
+      print('  🏁 MARKING BATTLE AS COMPLETED');
       updates['status'] = 'completed';
     }
+  } else {
+    print('  ✅ Only ${movesThisRoundIncludingCurrent} move(s) - keeping battle active');
   }
 
   // 3. ATOMIC WRITE: Use a Transaction to guarantee the move and status update commit together
