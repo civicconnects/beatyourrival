@@ -368,16 +368,20 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
         print("🎥 Attempting to save recording metadata for battleId: ${widget.battleId}");
         print("🔍 Current user UID: ${user.uid}");
         
+        // FIX: Use set() with merge instead of update() to avoid "document not found" error
+        // This creates the fields if they don't exist, or updates them if they do
+        // CRITICAL: Must use 'battles' (lowercase) to match battle_service.dart
         await FirebaseFirestore.instance
-          .collection('Battles')
+          .collection('battles')
           .doc(widget.battleId)
-          .update({
+          .set({
             'hasRecording': true,
             'recordingUrl': 'PENDING_LIVEKIT_RECORDING',
             'recordingRequested': FieldValue.serverTimestamp(),
             'liveStreamCompleted': FieldValue.serverTimestamp(),
             // Recording URL will be added later via LiveKit webhook or manual check
-          });
+          }, SetOptions(merge: true));  // ✅ merge: true prevents overwriting existing fields
+        
         print("✅ SUCCESS: Battle marked as recorded. Recording URL will be available shortly.");
       } catch (recordingError) {
         print("❌ CRITICAL ERROR: Failed to mark recording!");
