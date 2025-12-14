@@ -44,6 +44,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       
       await _controller.initialize();
       
+      // Add listener to update UI on video changes
+      _controller.addListener(() {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+      
       setState(() {
         _isInitialized = true;
       });

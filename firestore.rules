@@ -20,10 +20,10 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Battles collection
-    match /Battles/{battleId} {
+    // Battles collection (lowercase 'battles' to match actual collection name)
+    match /battles/{battleId} {
       // Any authenticated user can read battles (for battle history, active battles)
-      allow read: if request.auth != null;
+      allow read: if true;  // Allow even unauthenticated for spectators (we check in app)
       
       // Any authenticated user can create battles
       allow create: if request.auth != null;
@@ -38,26 +38,27 @@ service cloud.firestore {
                       (request.auth.uid == resource.data.challengerUid || 
                        request.auth.uid == resource.data.opponentUid);
       
-      // Moves subcollection (battle rounds)
-      match /Moves/{moveId} {
-        allow read: if request.auth != null;
+      // Moves subcollection (battle rounds) - lowercase 'moves' to match actual collection
+      match /moves/{moveId} {
+        allow read: if true;  // Allow anyone to read moves (for spectators)
         allow write: if request.auth != null;
       }
     }
     
-    // Activities collection (activity feed)
+    // Activities collection (uppercase 'Activities' - old collection)
     match /Activities/{activityId} {
-      // Any authenticated user can read the activity feed
       allow read: if request.auth != null;
-      
-      // Any authenticated user can create activity entries
       allow create: if request.auth != null;
-      
-      // Only the creator can update their activities
       allow update: if request.auth != null && request.auth.uid == resource.data.userId;
-      
-      // Only the creator can delete their activities
       allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Activity collection (lowercase 'activity' - current collection)
+    match /activity/{activityId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
     }
     
     // Friends collection
