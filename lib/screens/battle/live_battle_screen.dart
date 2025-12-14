@@ -365,18 +365,35 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
       // Note: LiveKit recording URL will be available a few minutes after the room closes
       // For now, we mark that a recording was made so the opponent knows to check back
       try {
+        print("🎥 Attempting to save recording metadata for battleId: ${widget.battleId}");
+        print("🔍 Current user UID: ${user.uid}");
+        
         await FirebaseFirestore.instance
           .collection('Battles')
           .doc(widget.battleId)
           .update({
             'hasRecording': true,
+            'recordingUrl': 'PENDING_LIVEKIT_RECORDING',
             'recordingRequested': FieldValue.serverTimestamp(),
             'liveStreamCompleted': FieldValue.serverTimestamp(),
             // Recording URL will be added later via LiveKit webhook or manual check
           });
-        print("🎥 Battle marked as recorded. Recording URL will be available shortly.");
+        print("✅ SUCCESS: Battle marked as recorded. Recording URL will be available shortly.");
       } catch (recordingError) {
-        print("⚠️ Failed to mark recording: $recordingError");
+        print("❌ CRITICAL ERROR: Failed to mark recording!");
+        print("Error details: $recordingError");
+        print("Error type: ${recordingError.runtimeType}");
+        
+        // Show error to user so we know what's happening
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ Recording metadata save failed: $recordingError'), 
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
         // Don't fail the battle submission for recording metadata
       }
 
