@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // SIMPLE DEVELOPMENT RULES
+    // Any authenticated user can read/write anything
+    // This works for ALL collections and features
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
