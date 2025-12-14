@@ -268,11 +268,15 @@ class _VideoRecordingScreenState extends ConsumerState<VideoRecordingScreen> {
       body: _isInitialized
           ? Stack(
               children: [
-                // Camera preview
-                Center(
-                  child: AspectRatio(
-                    aspectRatio: _cameraController!.value.aspectRatio,
-                    child: CameraPreview(_cameraController!),
+                // Camera preview - Full screen
+                Positioned.fill(
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _cameraController!.value.previewSize!.height,
+                      height: _cameraController!.value.previewSize!.width,
+                      child: CameraPreview(_cameraController!),
+                    ),
                   ),
                 ),
 
