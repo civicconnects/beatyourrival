@@ -33,10 +33,11 @@ dependencies:
   # Other Features
   flutter_stripe: ^10.1.1
   
-  # LiveKit + Token Generator
-  livekit_client: ^2.5.3
+  # Video Recording & Playback
+  camera: ^0.10.5+9
+  path_provider: ^2.1.3
+  video_player: ^2.8.6
   permission_handler: ^11.3.1
-  dart_jsonwebtoken: ^2.14.0 # FIX: Added to generate tokens
 
 dev_dependencies:
   flutter_test:

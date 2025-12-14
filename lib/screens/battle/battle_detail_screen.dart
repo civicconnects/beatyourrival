@@ -8,7 +8,8 @@ import '../../services/auth_service.dart';
 import '../../services/battle_service.dart';
 import '../../services/user_service.dart';
 import '../../services/activity_service.dart';
-import 'live_battle_screen.dart';
+import 'video_recording_screen.dart';
+import 'video_player_screen.dart';
 
 const uuid = Uuid();
 
@@ -318,49 +319,29 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
                       
                       final enhancedTitle = '[$selectedCategory] $moveTitle';
                       
-                      // ✅ AWAIT the result from LiveBattleScreen
-                      final result = await Navigator.of(context).push<String?>(
+                      // ✅ Navigate to Video Recording Screen
+                      print("🎥 Opening video recording screen...");
+                      await Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => LiveBattleScreen(
+                          builder: (context) => VideoRecordingScreen(
                             battleId: battle.id!,
-                            isHost: true,
-                            hostId: currentUserId, 
-                            hostUsername: currentUserId == battle.challengerUid 
-                              ? "You" 
-                              : opponentUsername,
-                            player2Id: battle.opponentUid,
-                            player2Username: battle.opponentUid == currentUserId 
-                              ? "You" 
-                              : opponentUsername,
                             moveTitle: enhancedTitle,
+                            battle: battle,
                           ),
                         ),
                       );
                       
-                      // ✅ CHECK RESULT: Submit move if performance completed
-                      if (result == 'COMPLETED' && mounted) {
-                        print("✅ Live performance ended. Submitting move for turn flip...");
-                        await _submitLiveMove(battle, enhancedTitle);
-                      }
+                      // Note: Video recording screen handles move submission internally
+                      print("✅ Returned from video recording screen");
 
                     } else {
-                      // WATCHER / SPECTATOR NAVIGATION
+                      // SPECTATOR: Can only watch recorded videos, not live
                       Navigator.of(context).pop(); // Close dialog
-                      print("👀 Joining as watcher");
-                      
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => LiveBattleScreen(
-                            battleId: battle.id!,
-                            isHost: false,
-                            hostId: battle.currentTurnUid,
-                            hostUsername: opponentUsername,
-                            player2Id: battle.currentTurnUid == battle.challengerUid 
-                              ? battle.opponentUid 
-                              : battle.challengerUid,
-                            player2Username: "Viewer",
-                            moveTitle: 'Watching Live Performance',
-                          ),
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Spectators can watch performances after they are recorded. Check "Moves History" section.'),
+                          backgroundColor: Colors.blue,
+                          duration: Duration(seconds: 4),
                         ),
                       );
                     }
@@ -1335,62 +1316,94 @@ class _BattleDetailScreenState extends ConsumerState<BattleDetailScreen> {
             final hasVoted = move.votes.containsKey(currentUserId);
             final int myScore = move.votes[currentUserId] ?? 0;
 
+            // Check if move has a valid video URL
+            final bool hasVideo = move.link.isNotEmpty && 
+                                  move.link.startsWith('http') && 
+                                  !move.link.contains('LIVE_PERFORMANCE_ROUND') &&
+                                  !move.link.contains('PENDING_LIVEKIT_RECORDING');
+            
             moveWidgets.add(
               Card(
                 elevation: 1,
                 color: isMine ? Colors.blue.shade50 : Colors.grey.shade50,
                 margin: const EdgeInsets.only(bottom: 8.0),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isMine ? Colors.blue : Colors.grey,
-                    child: Text(
-                      senderName[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  title: Text(
-                    move.title, 
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text('Submitted by $senderName'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton.icon(
-                        icon: const Icon(
-                          Icons.people_outline, 
-                          size: 16, 
-                          color: Colors.blueGrey,
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: isMine ? Colors.blue : Colors.grey,
+                        child: Text(
+                          senderName[0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white),
                         ),
-                        label: Text(
-                          '${move.totalScore} pts', 
-                          style: const TextStyle(
-                            color: Colors.blueGrey, 
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        onPressed: () => _showVoters(move.votes),
                       ),
-                      const SizedBox(width: 8),
-                      if (!isMine)
-                        IconButton(
-                          icon: Icon(
-                            hasVoted ? Icons.star : Icons.star_border,
-                            color: hasVoted ? Colors.orange : Colors.grey,
+                      title: Text(
+                        move.title, 
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text('Submitted by $senderName'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton.icon(
+                            icon: const Icon(
+                              Icons.people_outline, 
+                              size: 16, 
+                              color: Colors.blueGrey,
+                            ),
+                            label: Text(
+                              '${move.totalScore} pts', 
+                              style: const TextStyle(
+                                color: Colors.blueGrey, 
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            onPressed: () => _showVoters(move.votes),
                           ),
-                          tooltip: hasVoted 
-                            ? 'You rated this $myScore/10' 
-                            : 'Rate this move',
-                          onPressed: () => _showRatingDialog(move.id),
+                          const SizedBox(width: 8),
+                          if (!isMine)
+                            IconButton(
+                              icon: Icon(
+                                hasVoted ? Icons.star : Icons.star_border,
+                                color: hasVoted ? Colors.orange : Colors.grey,
+                              ),
+                              tooltip: hasVoted 
+                                ? 'You rated this $myScore/10' 
+                                : 'Rate this move',
+                              onPressed: () => _showRatingDialog(move.id),
+                            ),
+                        ],
+                      ),
+                    ),
+                    // Watch Video Button
+                    if (hasVideo)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              print('🎥 Opening video player for: ${move.link}');
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => VideoPlayerScreen(
+                                    videoUrl: move.link,
+                                    title: '${senderName}\'s Performance',
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.play_circle_outline),
+                            label: Text(isMine ? 'Watch Your Performance' : 'Watch Performance'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
                         ),
-                    ],
-                  ),
-                  onTap: () {
-                    // Could open external link here
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Link: ${move.link}')),
-                    );
-                  },
+                      ),
+                  ],
                 ),
               ),
             );
