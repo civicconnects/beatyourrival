@@ -258,17 +258,27 @@ class BattleService {
   }
 
   // 3. ATOMIC WRITE: Use a Transaction to guarantee the move and status update commit together
+  print('🔄 Starting transaction to save move and update battle...');
+  print('  Updates to apply: $updates');
+  
   await _firestore.runTransaction((transaction) async {
     // Save the new move (atomic write 1)
     final moveDocRef = battleDocRef.collection('moves').doc(move.id);
     transaction.set(moveDocRef, move.toMap());
+    print('  ✅ Move queued for save: ${move.id}');
 
     // Update the battle status (atomic write 2)
     transaction.update(battleDocRef, updates);
+    print('  ✅ Battle updates queued');
+  }).then((_) {
+    print('✅ Transaction completed successfully!');
   }).catchError((error) {
     print('❌ Submission Transaction failed: $error');
+    print('   Error type: ${error.runtimeType}');
     throw Exception('Failed to submit move and flip turn: $error'); 
   });
+  
+  print('✅ submitMove() completed for battleId: $battleId');
 }
 
   // Vote for a move
