@@ -206,6 +206,16 @@ class BattleService {
       .where('round', isEqualTo: battle.currentRound)
       .get();
   
+  // 🔒 CRITICAL FIX: Check if this user already has a move in this round (prevent double submission)
+  final currentUserAlreadyPlayed = movesSnapshotBefore.docs.any(
+    (doc) => doc.data()['submittedByUid'] == move.submittedByUid
+  );
+  
+  if (currentUserAlreadyPlayed) {
+    print('⚠️ User ${move.submittedByUid} already has a move in round ${battle.currentRound}. Skipping duplicate submission.');
+    return; // Exit early - don't submit duplicate move
+  }
+  
   final movesThisRoundIncludingCurrent = movesSnapshotBefore.docs.length + 1;
   
   // 🔍 DEBUG LOGGING
