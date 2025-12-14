@@ -205,8 +205,8 @@ class _VideoRecordingScreenState extends ConsumerState<VideoRecordingScreen> {
         title: widget.moveTitle,
         link: downloadUrl, // Video URL instead of LIVE_PERFORMANCE_ROUND_
         submittedByUid: user.uid,
+        round: widget.battle.currentRound,
         submittedAt: DateTime.now(),
-        performedAt: DateTime.now(),
       );
 
       print('🎯 Submitting move with video URL...');
