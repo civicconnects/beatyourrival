@@ -359,7 +359,16 @@ class _LiveBattleScreenState extends ConsumerState<LiveBattleScreen> {
       );
 
       // Call Service logic to flip turn atomically
-      await ref.read(battleServiceProvider).submitMove(widget.battleId, move);
+      print("🎯 Calling submitMove for battleId: ${widget.battleId}");
+      try {
+        await ref.read(battleServiceProvider).submitMove(widget.battleId, move);
+        print("✅ submitMove completed successfully!");
+      } catch (submitError) {
+        print("❌ CRITICAL ERROR in submitMove:");
+        print("Error: $submitError");
+        print("Error type: ${submitError.runtimeType}");
+        // Don't throw - let recording continue even if submitMove fails
+      }
 
       // CRITICAL: Mark that recording will be available
       // Note: LiveKit recording URL will be available a few minutes after the room closes
