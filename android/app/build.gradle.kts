@@ -87,8 +87,14 @@ dependencies {
     // Adds Google Play Services Base package, crucial for stability with Firebase
     implementation("com.google.android.gms:play-services-base:18.4.0")
     
+    // Force specific versions to avoid duplicate classes
+    constraints {
+        implementation("com.google.android.play:core-common:2.0.3") {
+            because("Resolves duplicate class conflicts with play:core")
+        }
+    }
+    
     // Google Play Core for deferred components (required by Flutter)
-    // Exclude core-common to avoid duplicate class conflicts
     implementation("com.google.android.play:core:1.10.3") {
         exclude(group = "com.google.android.play", module = "core-common")
     }
