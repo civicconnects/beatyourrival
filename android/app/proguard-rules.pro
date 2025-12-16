@@ -22,6 +22,19 @@
 # Stripe
 -keep class com.stripe.** { *; }
 -keepclassmembers class com.stripe.** { *; }
+-keep class com.reactnativestripesdk.** { *; }
+-dontwarn com.stripe.android.pushProvisioning.**
+
+# Google Play Core (for deferred components)
+-keep class com.google.android.play.core.** { *; }
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.splitcompat.** { *; }
+-keep class com.google.android.play.core.splitinstall.** { *; }
+-keep class com.google.android.play.core.tasks.** { *; }
+
+# Flutter Play Store integration
+-keep class io.flutter.embedding.android.FlutterPlayStoreSplitApplication { *; }
+-keep class io.flutter.embedding.engine.deferredcomponents.** { *; }
 
 # Camera Plugin
 -keep class io.flutter.plugins.camera.** { *; }

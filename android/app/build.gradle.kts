@@ -85,5 +85,8 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib") 
 
     // Adds Google Play Services Base package, crucial for stability with Firebase
-    implementation("com.google.android.gms:play-services-base:18.4.0") 
+    implementation("com.google.android.gms:play-services-base:18.4.0")
+    
+    // Google Play Core for deferred components (required by Flutter)
+    implementation("com.google.android.play:core:1.10.3")
 }
