@@ -1,10 +1,20 @@
 # Flutter wrapper
 -keep class io.flutter.app.** { *; }
--keep class io.flutter.plugin.** { *; }
--keep class io.flutter.util.** { *; }
--keep class io.flutter.view.** { *; }
--keep class io.flutter.** { *; }
--keep class io.flutter.plugins.** { *; }
+-keep class io.flutter.plugin.**  { *; }
+-keep class io.flutter.util.**  { *; }
+-keep class io.flutter.view.**  { *; }
+-keep class io.flutter.**  { *; }
+-keep class io.flutter.plugins.**  { *; }
+
+# Keep all Activities
+-keep public class * extends android.app.Activity
+-keep public class * extends android.app.Application
+-keep public class * extends android.app.Service
+-keep public class * extends android.content.BroadcastReceiver
+-keep public class * extends android.content.ContentProvider
+
+# Keep MainActivity
+-keep class com.beatyourrival.app.MainActivity { *; }
 
 # Firebase
 -keep class com.google.firebase.** { *; }
@@ -13,39 +23,43 @@
 -dontwarn com.google.android.gms.**
 
 # Firestore
--keep class com.google.firebase.firestore.** { *; }
--keepclassmembers class com.google.firebase.firestore.** { *; }
-
-# Firebase Storage
--keep class com.google.firebase.storage.** { *; }
+-keep class com.google.firestore.** { *; }
+-keep class com.google.cloud.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
 
 # Stripe
 -keep class com.stripe.** { *; }
--keepclassmembers class com.stripe.** { *; }
--keep class com.reactnativestripesdk.** { *; }
--dontwarn com.stripe.android.pushProvisioning.**
+-dontwarn com.stripe.**
 
-# Google Play Core (for deferred components)
--keep class com.google.android.play.core.** { *; }
--dontwarn com.google.android.play.core.**
--keep class com.google.android.play.core.splitcompat.** { *; }
--keep class com.google.android.play.core.splitinstall.** { *; }
--keep class com.google.android.play.core.tasks.** { *; }
-
-# Flutter Play Store integration
--keep class io.flutter.embedding.android.FlutterPlayStoreSplitApplication { *; }
--keep class io.flutter.embedding.engine.deferredcomponents.** { *; }
-
-# Camera Plugin
+# Camera plugin
 -keep class io.flutter.plugins.camera.** { *; }
 
-# Video Player
+# Video player
 -keep class io.flutter.plugins.videoplayer.** { *; }
 
-# Prevent obfuscation of native methods
+# Path provider
+-keep class io.flutter.plugins.pathprovider.** { *; }
+
+# Keep native methods
 -keepclasseswithmembernames class * {
     native <methods>;
 }
 
-# Keep custom exceptions
--keep public class * extends java.lang.Exception
+# Keep model classes
+-keep class com.beatyourrival.app.models.** { *; }
+
+# Keep Parcelables
+-keep class * implements android.os.Parcelable {
+  public static final android.os.Parcelable$Creator *;
+}
+
+# Keep Serializable
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
