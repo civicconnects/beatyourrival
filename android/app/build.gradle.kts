@@ -51,9 +51,9 @@ android {
         // Updated package name for production
         applicationId = "com.beatyourrival.app"
         minSdk = 21  // Android 5.0+
-        targetSdk = 34  // Android 14
-        versionCode = 1
-        versionName = "1.0.0"
+        targetSdk = 35  // Android 15 (required by Google Play)
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     buildTypes {

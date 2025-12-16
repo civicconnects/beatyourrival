@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:250491374057:android:b715c21974a03b19f86378",
+        "mobilesdk_app_id": "1:250491374057:android:fb0710515317a080f86378",
         "android_client_info": {
-          "package_name": "com.example.beatrivals_app"
+          "package_name": "com.beatyourrival.app"
         }
       },
       "oauth_client": [],
