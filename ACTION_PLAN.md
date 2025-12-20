@@ -56,7 +56,7 @@ flutter pub get
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Select "BeatRivals" project (or create if doesn't exist)
 3. Add Android app:
-   - Package name: `com.civicconnects.beatrivals` (change from example)
+   - Package name: `com.beatyourrival.app` (change from example)
    - Download `google-services.json`
    - Place in `android/app/`
 4. Add iOS app:
@@ -75,16 +75,16 @@ flutter pub get
 #### Day 3-4: Package Name Changes
 
 **Current**: `com.example.beatrivals_app`  
-**Target**: `com.civicconnects.beatrivals`
+**Target**: `com.beatyourrival.app`
 
 **Files to Update**:
 
 1. **Android** (`android/app/build.gradle.kts`):
 ```kotlin
 android {
-    namespace = "com.civicconnects.beatrivals"  // Change this
+    namespace = "com.beatyourrival.app"  // Change this
     defaultConfig {
-        applicationId = "com.civicconnects.beatrivals"  // Change this
+        applicationId = "com.beatyourrival.app"  // Change this
     }
 }
 ```

@@ -10,20 +10,39 @@ import 'firebase_options.dart';
 import 'screens/auth_checker.dart'; 
 
 void main() async {
-  // 1. Ensure Flutter widgets are initialized before any async calls
-  WidgetsFlutterBinding.ensureInitialized(); 
+  try {
+    // 1. Ensure Flutter widgets are initialized before any only async calls
+    WidgetsFlutterBinding.ensureInitialized(); 
 
-  // 2. Initialize Firebase using the generated options for the current platform
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+    // 2. Initialize Firebase using the generated options for the current platform
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
 
-  // 3. Run the application wrapped in ProviderScope for Riverpod state management
-  runApp(
-    const ProviderScope(
-      child: MyApp(),
-    ),
-  );
+    // 3. Run the application wrapped in ProviderScope for Riverpod state management
+    runApp(
+      const ProviderScope(
+        child: MyApp(),
+      ),
+    );
+  } catch (e, stack) {
+    // If initialization fails, run a simple error app to show the error
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(30),
+            child: Center(
+              child: Text(
+                'CRITICAL INIT ERROR:\n$e\n\n$stack',
+                style: const TextStyle(color: Colors.red, fontSize: 16),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {

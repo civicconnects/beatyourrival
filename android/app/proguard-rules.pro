@@ -1,22 +1,42 @@
-# Flutter wrapper
+# ----------------------------------------------------------
+# FLUTTER & DART WRAPPERS
+# ----------------------------------------------------------
 -keep class io.flutter.app.** { *; }
--keep class io.flutter.plugin.**  { *; }
--keep class io.flutter.util.**  { *; }
--keep class io.flutter.view.**  { *; }
--keep class io.flutter.**  { *; }
--keep class io.flutter.plugins.**  { *; }
+-keep class io.flutter.plugin.** { *; }
+-keep class io.flutter.util.** { *; }
+-keep class io.flutter.view.** { *; }
+-keep class io.flutter.** { *; }
+-keep class io.flutter.plugins.** { *; }
+-keep class io.flutter.embedding.** { *; }
+-dontwarn io.flutter.embedding.**
 
-# Keep all Activities
+# ----------------------------------------------------------
+# ANDROID COMPONENTS (CRITICAL FIX)
+# ----------------------------------------------------------
+# Explicitly keep the constructor of your MainActivity to prevent ClassNotFoundException
+-keep class com.beatyourrival.app.MainActivity {
+    <init>(...);
+    *;
+}
+
+# Keep all Activities, Services, etc. from Manifest
 -keep public class * extends android.app.Activity
+-keep public class * extends androidx.appcompat.app.AppCompatActivity
 -keep public class * extends android.app.Application
 -keep public class * extends android.app.Service
 -keep public class * extends android.content.BroadcastReceiver
 -keep public class * extends android.content.ContentProvider
+-keep public class * extends androidx.fragment.app.Fragment
 
-# Keep MainActivity
--keep class com.beatyourrival.app.MainActivity { *; }
+# Keep AndroidX Lifecycle (Required for FlutterActivity)
+-keep class androidx.lifecycle.** { *; }
+-keepclassmembers class * implements androidx.lifecycle.LifecycleObserver {
+    <init>(...);
+}
 
-# Firebase
+# ----------------------------------------------------------
+# FIREBASE & GOOGLE SERVICES
+# ----------------------------------------------------------
 -keep class com.google.firebase.** { *; }
 -keep class com.google.android.gms.** { *; }
 -dontwarn com.google.firebase.**
@@ -28,6 +48,9 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 
+# ----------------------------------------------------------
+# THIRD PARTY PLUGINS
+# ----------------------------------------------------------
 # Stripe
 -keep class com.stripe.** { *; }
 -dontwarn com.stripe.**
@@ -41,6 +64,9 @@
 # Path provider
 -keep class io.flutter.plugins.pathprovider.** { *; }
 
+# ----------------------------------------------------------
+# GENERIC & MODELS
+# ----------------------------------------------------------
 # Keep native methods
 -keepclasseswithmembernames class * {
     native <methods>;

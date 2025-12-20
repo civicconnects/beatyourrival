@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDKVhLLucXKGtwStP6p8kRZLtrdGDAFLVo',
-    appId: '1:250491374057:android:b715c21974a03b19f86378',
+    appId: '1:250491374057:android:fb0710515317a080f86378',
     messagingSenderId: '250491374057',
     projectId: 'beatrivals-d8d2c',
     storageBucket: 'beatrivals-d8d2c.firebasestorage.app',

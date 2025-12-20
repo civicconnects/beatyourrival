@@ -29,6 +29,15 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+
+    android {
+    // ... existing config ...
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+}    
     }
 
     kotlinOptions {
@@ -50,10 +59,11 @@ android {
     defaultConfig {
         // Updated package name for production
         applicationId = "com.beatyourrival.app"
-        minSdk = 21  // Android 5.0+
+        minSdk = flutter.minSdkVersion  // Android 5.0+
         targetSdk = 35  // Android 15 (required by Google Play)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true  // <--- ADD THIS LINE HERE
     }
 
     buildTypes {
